@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TimberLogic - Диагностика статики</title>
+    {% load static %}
+
+    <style>
+        .test-frame {
+            border: 3px solid green;
+            padding: 10px;
+            margin: 10px;
+        }
+        .error {
+            border: 3px solid red;
+            background-color: #ffeeee;
+            padding: 10px;
+            margin: 10px;
+        }
+        .success {
+            border: 3px solid blue;
+            background-color: #eeeeff;
+            padding: 10px;
+            margin: 10px;
+        }
+    </style>
+
+    <!-- Bootstrap из локальной папки -->
+    <link rel="stylesheet" href="{% static 'bootstrap/bootstrap.min.css' %}">
+
+    <!-- Дополнительная проверка -->
+    <link rel="alternate stylesheet" href="/static/bootstrap/bootstrap.min.css" title="direct">
+</head>
+<body>
+    <div class="test-frame">
+        <h1>Диагностика статики TimberLogic</h1>
+        <p><strong>STATIC_URL:</strong> {{ STATIC_URL }}</p>
+        <p><strong>Путь через static тег:</strong> {% static 'bootstrap/bootstrap.min.css' %}</p>
+        <p><strong>Прямой путь:</strong> /static/bootstrap/bootstrap.min.css</p>
+    </div>
+
+    <div class="success">
+        <h3>Тестовые Bootstrap кнопки:</h3>
+        <button class="btn btn-primary">Primary кнопка (должна быть СИНЕЙ)</button>
+        <button class="btn btn-danger">Danger кнопка (должна быть КРАСНОЙ)</button>
+        <button class="btn btn-success">Success кнопка (должна быть ЗЕЛЁНОЙ)</button>
+    </div>
+
+    <div class="error">
+        <h3>Проверка:</h3>
+        <p>Если кнопки выше СЕРОГО цвета — Bootstrap не загрузился</p>
+        <p>Если кнопки цветные — Bootstrap работает!</p>
+    </div>
+
+    <div>
+        <h3>Проверка прямого доступа:</h3>
+        <a href="/static/bootstrap/bootstrap.min.css" target="_blank">Открыть CSS файл напрямую</a>
+    </div>
+<div id="data-container" class="mt-3">
+                    <!-- Сюда будут загружаться данные -->
+                    <img src="{% static 'orig.jpg' %}"
+             alt="Склад"
+             class="img-fluid rounded shadow"
+             height="200">
+                </div>
+</body>
+</html>
