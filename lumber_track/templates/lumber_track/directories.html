@@ -1,0 +1,131 @@
+<!-- lumber_track/templates/lumber_track/directories.html -->
+{% extends 'lumber_track/base.html' %}
+
+{% block title %}Справочники{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="h2 mb-3"><i class="bi bi-book fs-1 text-secondary" ></i> Справочники</h1>
+        <p class="text-muted">Управление основными справочниками системы</p>
+        <hr>
+    </div>
+</div>
+
+<!-- Основные справочники -->
+<div class="row mb-5">
+    <div class="col-12">
+        <h3 class="h4 mb-3">
+             Основные
+        </h3>
+        <div class="row g-4">
+            <!-- Справочник изделий -->
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'lumber_track:productitem_list' %}" class="text-decoration-none">
+                    <div class="card h-100 border-0 shadow-sm" style="border-left: 2px solid grey !important;">
+                        <div class="card-body text-center">
+                            <i class="bi bi-table fs-1 text-secondary" ></i>
+                            <h5 class="card-title mt-3">Справочник изделий</h5>
+                            <p class="card-text small text-muted">Готовая номенклатура</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Наименования изделий -->
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'lumber_track:productname_list' %}" class="text-decoration-none">
+                    <div class="card h-100 border-0 shadow-sm" style="border-left: 2px solid grey !important;">
+                        <div class="card-body text-center">
+                            <i class="bi bi-box-seam fs-1 text-secondary" ></i>
+                            <h5 class="card-title mt-3">Наименования изделий</h5>
+                            <p class="card-text small text-muted">Брусок, вагонка, дверь</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Размеры погонажа -->
+            <div class="col-md-4 col-lg-3">
+               <a href="{% url 'lumber_track:lumberdimension_list' %}" class="text-decoration-none">
+                    <div class="card h-100 border-0 shadow-sm" style="border-left: 2px solid grey !important;">
+                        <div class="card-body text-center">
+                            <i class="bi bi-inboxes fs-1 text-secondary" ></i>
+                            <h5 class="card-title mt-3">Размеры погонажа</h5>
+                            <p class="card-text small text-muted">Толщина × Ширина × Длина</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Размеры штучных -->
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'lumber_track:unitdimension_list' %}" class="text-decoration-none">
+                    <div class="card h-100 border-0 shadow-sm" style="border-left: 2px solid grey !important;">
+                        <div class="card-body text-center">
+                            <i class="bi bi-rulers fs-1 text-secondary" ></i>
+                            <h5 class="card-title mt-3">Размеры изделий</h5>
+                            <p class="card-text small text-muted">Длина × Ширина × Высота</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Вспомогательные справочники -->
+<div class="row">
+    <div class="col-12">
+        <h3 class="h4 mb-3">
+             Вспомогательные
+        </h3>
+        <div class="row g-4">
+            <!-- Типы продукции -->
+            <div class="col-md-4 col-lg-3">
+               <a href="{% url 'lumber_track:producttype_list' %}" class="text-decoration-none">
+                    <div class="card h-100 border-0 shadow-sm" style="border-right: 2px solid grey !important;">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center">
+                            <i class="bi bi-tags fs-1 text-secondary" ></i>
+                            <h5 class="card-title mt-3">Типы продукции</h5>
+                            <p class="card-text small text-muted">Погонаж, штучные изделия</p>
+                        </div>
+                    </div>
+                </a>
+                </div>
+            </div>
+
+            <!-- Породы древесины -->
+            <div class="col-md-4 col-lg-3">
+                <a href="{% url 'lumber_track:woodspecies_list' %}" class="text-decoration-none">
+                     <div class="card h-100 border-0 shadow-sm" style="border-right: 2px solid grey !important;">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center">
+                            <i class="bi bi-tree fs-1 text-secondary" ></i>
+                            <h5 class="card-title mt-3">Породы древесины</h5>
+                            <p class="card-text small text-muted">Сосна, кедр, береза, дуб</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+            <!-- Категории качества -->
+            <div class="col-md-4 col-lg-3">
+                 <a href="{% url 'lumber_track:qualitygrade_list' %}" class="text-decoration-none">
+                     <div class="card h-100 border-0 shadow-sm" style="border-right: 2px solid grey !important;">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center">
+                            <i class="bi bi-star fs-1 text-secondary" ></i>
+                            <h5 class="card-title mt-3">Категории качества</h5>
+                            <p class="card-text small text-muted">A, B, C, D</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+    </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

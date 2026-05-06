@@ -1,0 +1,68 @@
+<!-- lumber_track/templates/lumber_track/home.html -->
+{% extends 'lumber_track/base.html' %}
+{% load static %}
+
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+<div class="row min-vh-80 align-items-center">
+    <div class="col-12 text-center">
+        <div class="hero-section">
+
+            <h1 class="display-3 fw-bold text-secondary mt-4">LumberTrack</h1>
+            <p class="lead text-muted mb-4">Система учета строганых изделий и пиломатериалов</p>
+            <p class="text-secondary"> Деревообрабатывающий комплекс АО Енисейская сплавная контора</p>
+
+            <div class="mt-5">
+                <div class="row justify-content-center">
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <a href="{% url 'lumber_track:directories' %}" class="text-decoration-none">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-book fs-2 text-secondary" ></i>
+                                    <h5 class="mt-2">Справочники</h5>
+                                    <small class="text-muted">Управление номенклатурой</small>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <a href="#" class="text-decoration-none">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-file-text fs-2 text-secondary"></i>
+                                    <h5 class="mt-2">Документы</h5>
+                                    <small class="text-muted">Приход и расход</small>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <a href="#" class="text-decoration-none">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-bar-chart fs-2 text-secondary"></i>
+                                    <h5 class="mt-2">Отчеты</h5>
+                                    <small class="text-muted">Аналитика и остатки</small>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .min-vh-80 {
+        min-height: 80vh;
+    }
+    .hero-section {
+        padding: 3rem 0;
+    }
+    .card {
+        transition: none;
+    }
+</style>
+{% endblock %}

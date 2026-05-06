@@ -1,0 +1,259 @@
+<!-- lumber_track/templates/lumber_track/directory_unitdimension.html -->
+{% extends 'lumber_track/base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="h2 mb-3">
+                <i class="bi bi-rulers " ></i> {{ title }}
+            </h1>
+            <p class="text-muted">Управление размерами штучных изделий (Длина-Ширина-Высота)</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
+                <i class="bi bi-plus-circle"></i> Добавить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Поле поиска -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body py-2">
+                <div class="input-group">
+                    <span class="input-group-text bg-white">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text"
+                           class="form-control border-start-0"
+                           id="searchInput"
+                           placeholder="Поиск по размерам...">
+                    <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                        <i class="bi bi-x-circle"></i> Очистить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="itemsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Длина (мм)</th>
+                                <th>Ширина (мм)</th>
+                                <th>Высота (мм)</th>
+                                <th>Полный размер</th>
+                                <th style="width: 100px;">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            {% for item in items %}
+                            <tr data-search="{{ item.length }}-{{ item.width }}-{{ item.height }}">
+                                <td>{{ item.length }} </td>
+                                <td>{{ item.width }} </td>
+                                <td>{{ item.height }} </td>
+                                <td>{{ item.length }}-{{ item.width }}-{{ item.height }}</td>
+                                <td>
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-primary edit-btn"
+                                            data-id="{{ item.id }}"
+                                            data-length="{{ item.length }}"
+                                            data-width="{{ item.width }}"
+                                            data-height="{{ item.height }}"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#editModal">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <a href="{% url delete_url item.id %}"
+                                       class="btn btn-sm btn-outline-danger"
+                                       onclick="return confirm('Удалить размер {{ item.length }}-{{ item.width }}-{{ item.height }}?')">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr id="emptyRow">
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    Нет записей. Нажмите "Добавить" для создания первого размера.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно ДОБАВЛЕНИЯ -->
+<div class="modal fade" id="addModal" tabindex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{{ create_url }}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addModalLabel">
+                        <i class="bi bi-plus-circle"></i> Добавить размер
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="length" class="form-label">Длина (мм)</label>
+                            <input type="number" class="form-control" id="length" name="length" required autofocus>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="width" class="form-label">Ширина (мм)</label>
+                            <input type="number" class="form-control" id="width" name="width" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="height" class="form-label">Высота (мм)</label>
+                            <input type="number" class="form-control" id="height" name="height" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно РЕДАКТИРОВАНИЯ -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="" id="editForm">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editModalLabel">
+                        <i class="bi bi-pencil"></i> Редактировать размер
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_length" class="form-label">Длина (мм)</label>
+                            <input type="number" class="form-control" id="edit_length" name="length" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_width" class="form-label">Ширина (мм)</label>
+                            <input type="number" class="form-control" id="edit_width" name="width" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_height" class="form-label">Высота (мм)</label>
+                            <input type="number" class="form-control" id="edit_height" name="height" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Ждем полной загрузки DOM
+    document.addEventListener('DOMContentLoaded', function() {
+        // Поиск
+        const searchInput = document.getElementById('searchInput');
+        const clearBtn = document.getElementById('clearSearch');
+        const tableBody = document.getElementById('tableBody');
+        const rows = Array.from(tableBody.querySelectorAll('tr:not(#emptyRow)'));
+        const emptyRow = document.getElementById('emptyRow');
+
+        if (searchInput) {
+            function filterTable() {
+                const searchTerm = searchInput.value.toLowerCase().trim();
+                let hasVisibleRows = false;
+
+                rows.forEach(row => {
+                    const searchText = row.getAttribute('data-search') || row.innerText.toLowerCase();
+
+                    if (searchTerm === '' || searchText.includes(searchTerm)) {
+                        row.style.display = '';
+                        hasVisibleRows = true;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                if (searchTerm !== '' && !hasVisibleRows) {
+                    if (!document.getElementById('noResultsRow')) {
+                        const noResultsRow = document.createElement('tr');
+                        noResultsRow.id = 'noResultsRow';
+                        noResultsRow.innerHTML = '<td colspan="5" class="text-center text-muted py-4">🔍 Ничего не найдено</td>';
+                        tableBody.appendChild(noResultsRow);
+                    }
+                } else {
+                    const noResultsRow = document.getElementById('noResultsRow');
+                    if (noResultsRow) noResultsRow.remove();
+                }
+
+                if (emptyRow && rows.length === 0) {
+                    emptyRow.style.display = searchTerm === '' ? '' : 'none';
+                }
+            }
+
+            searchInput.addEventListener('input', filterTable);
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    searchInput.value = '';
+                    filterTable();
+                    searchInput.focus();
+                });
+            }
+        }
+
+        // Редактирование
+        const editBaseUrl = '/directories/unitdimension/';
+        const editBtns = document.querySelectorAll('.edit-btn');
+
+        console.log('Найдено кнопок редактирования:', editBtns.length);
+
+        editBtns.forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.dataset.id;
+                const length = this.dataset.length;
+                const width = this.dataset.width;
+                const height = this.dataset.height;
+
+                console.log('Редактирование:', {id, length, width, height});
+
+                const editForm = document.getElementById('editForm');
+                if (editForm) {
+                    editForm.action = `${editBaseUrl}${id}/edit/`;
+                }
+
+                const editLength = document.getElementById('edit_length');
+                const editWidth = document.getElementById('edit_width');
+                const editHeight = document.getElementById('edit_height');
+
+                if (editLength) editLength.value = length;
+                if (editWidth) editWidth.value = width;
+                if (editHeight) editHeight.value = height;
+            });
+        });
+    });
+</script>
+{% endblock %}

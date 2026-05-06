@@ -1,0 +1,601 @@
+<!-- lumber_track/templates/lumber_track/directory_productitem.html -->
+{% extends 'lumber_track/base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .select2-container--bootstrap-5 .select2-selection {
+        min-height: 38px;
+    }
+    .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+        line-height: 36px;
+    }
+    .select2-container--bootstrap-5 .select2-dropdown {
+        min-width: 300px;
+    }
+    .select2-results__option--highlighted[aria-selected] {
+        background-color: #0d6efd !important;
+    }
+    .quick-add-option {
+        background-color: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        padding: 8px 12px;
+        font-style: italic;
+        color: #198754;
+    }
+    .quick-add-option:hover {
+        background-color: #d1e7dd;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="h2 mb-3">
+                <i class="bi bi-table"></i> {{ title }}
+            </h1>
+            <p class="text-muted">Управление готовой номенклатурой изделий</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
+                <i class="bi bi-plus-circle"></i> Добавить изделие
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Поле поиска -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body py-2">
+                <div class="input-group">
+                    <span class="input-group-text bg-white">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text"
+                           class="form-control border-start-0"
+                           id="searchInput"
+                           placeholder="Поиск по изделиям...">
+                    <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                        <i class="bi bi-x-circle"></i> Очистить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Таблица изделий -->
+<!-- lumber_track/templates/lumber_track/directory_productitem.html -->
+<!-- ... всё остальное без изменений ... -->
+
+<!-- Таблица изделий -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="itemsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Наименование</th>
+                                <th>Размер</th>
+                                <th>Площадь (м²)</th>
+                                <th>Объем (м³)</th>
+                                <th>Категория</th>
+                                <th>Порода</th>
+                                <th style="width: 60px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            {% for item in items %}
+                            <tr data-search="{{ item.full_name|lower }}">
+                                <td>{{ item.product_name.name }}</td>
+                                <td>
+                                    {% if item.lumber_dim %}
+                                        {{ item.lumber_dim.thickness }}-{{ item.lumber_dim.width }}-{{ item.lumber_dim.length }} мм
+                                    {% elif item.unit_dim %}
+                                        {{ item.unit_dim.length }}-{{ item.unit_dim.width }}-{{ item.unit_dim.height }} мм
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.lumber_dim %}
+                                        {{ item.lumber_dim.area_m2|floatformat:3 }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.lumber_dim %}
+                                        {{ item.lumber_dim.volume_m3|floatformat:6 }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>{{ item.grade.code }}</td>
+                                <td>{{ item.species.name }}</td>
+                                <td>
+                                    <a href="{% url delete_url item.id %}"
+                                       class="btn btn-sm btn-outline-danger"
+                                       onclick="return confirm('Удалить изделие?')">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr id="emptyRow">
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    Нет записей. Нажмите "Добавить" для создания первого изделия.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Модальное окно ДОБАВЛЕНИЯ -->
+<div class="modal fade" id="addModal" tabindex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" action="{% url 'lumber_track:productitem_create' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addModalLabel">
+                        <i class="bi bi-plus-circle"></i> Добавить изделие
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="product_name" class="form-label">Наименование *</label>
+                            <select class="form-select select2-productname" id="product_name" name="product_name" required style="width: 100%;">
+                                <option value="">Выберите...</option>
+                                {% for pn in product_names %}
+                                <option value="{{ pn.id }}">{{ pn.name }} ({{ pn.product_type.name }})</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Можно ввести новое наименование - оно будет добавлено автоматически</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="species" class="form-label">Порода *</label>
+                            <select class="form-select select2-species" id="species" name="species" required style="width: 100%;">
+                                <option value="">Выберите...</option>
+                                {% for s in species_list %}
+                                <option value="{{ s.id }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Можно ввести новую породу - она будет добавлена автоматически</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="grade" class="form-label">Категория *</label>
+                            <select class="form-select select2-grade" id="grade" name="grade" required style="width: 100%;">
+                                <option value="">Выберите...</option>
+                                {% for g in grades_list %}
+                                <option value="{{ g.id }}">{{ g.code }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Можно ввести новую категорию (A, B, C, D, Extra и т.д.)</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="dimension_type" class="form-label">Тип размеров</label>
+                            <select class="form-select" id="dimension_type">
+                                <option value="">Не выбран</option>
+                                <option value="lumber">Погонаж (Толщина-Ширина-Длина)</option>
+                                <option value="unit">Штучное (Длина-Ширина-Высота)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row" id="lumber_dim_row" style="display: none;">
+                        <div class="col-12 mb-3">
+                            <label for="lumber_dim" class="form-label">Размеры погонажа</label>
+                            <select class="form-select select2-lumberdim" id="lumber_dim" name="lumber_dim" style="width: 100%;">
+                                <option value="">Выберите размер...</option>
+                                {% for ld in lumber_dims %}
+                                <option value="{{ ld.id }}">{{ ld.thickness }}-{{ ld.width }}-{{ ld.length }} мм ({{ ld.volume_m3|floatformat:6 }} м³)</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Формат: Толщина-Ширина-Длина (например: 25-100-3000)</small>
+                        </div>
+                    </div>
+                    <div class="row" id="unit_dim_row" style="display: none;">
+                        <div class="col-12 mb-3">
+                            <label for="unit_dim" class="form-label">Размеры изделия</label>
+                            <select class="form-select select2-unitdim" id="unit_dim" name="unit_dim" style="width: 100%;">
+                                <option value="">Выберите размер...</option>
+                                {% for ud in unit_dims %}
+                                <option value="{{ ud.id }}">{{ ud.length }}-{{ ud.width }}-{{ ud.height }} мм</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Формат: Длина-Ширина-Высота (например: 2000-800-400)</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Базовые URL для API
+    const API_URLS = {
+        productname: {
+            search: '/api/productname/search/',
+            add: '/api/productname/add/'
+        },
+        species: {
+            search: '/api/woodspecies/search/',
+            add: '/api/woodspecies/add/'
+        },
+        grade: {
+            search: '/api/qualitygrade/search/',
+            add: '/api/qualitygrade/add/'
+        },
+        lumberdim: {
+            search: '/api/lumberdim/search/',
+            add: '/api/lumberdim/add/'
+        },
+        unitdim: {
+            search: '/api/unitdim/search/',
+            add: '/api/unitdim/add/'
+        }
+    };
+
+    // Функция создания Select2 с поддержкой добавления новых элементов
+    function initSelect2WithAdd(element, type, placeholder) {
+        const searchUrl = API_URLS[type].search;
+        const addUrl = API_URLS[type].add;
+
+        element.select2({
+            theme: 'bootstrap-5',
+            dropdownParent: $('#addModal'),
+            placeholder: placeholder || 'Выберите или введите...',
+            allowClear: true,
+            tags: true,
+            createTag: function(params) {
+                const term = params.term.trim();
+                if (term === '') return null;
+                return {
+                    id: term,
+                    text: term,
+                    newTag: true
+                };
+            },
+            ajax: {
+                url: searchUrl,
+                dataType: 'json',
+                delay: 250,
+                data: function(params) {
+                    return { term: params.term };
+                },
+                processResults: function(data) {
+                    return { results: data.results };
+                }
+            }
+        });
+
+        // Обработка создания нового элемента
+        element.on('select2:select', function(e) {
+            if (e.params.data.newTag) {
+                const newValue = e.params.data.text;
+                fetch(addUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ name: newValue })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.id) {
+                        // Создаем новый option и выбираем его
+                        const newOption = new Option(data.text, data.id, true, true);
+                        element.append(newOption).trigger('change');
+                    } else {
+                        alert('Ошибка добавления: ' + (data.error || 'Неизвестная ошибка'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Ошибка при добавлении');
+                });
+            }
+        });
+    }
+
+    // Инициализация Select2 для каждого поля
+    initSelect2WithAdd($('.select2-productname'), 'productname', 'Выберите наименование...');
+    initSelect2WithAdd($('.select2-species'), 'species', 'Выберите породу...');
+    initSelect2WithAdd($('.select2-grade'), 'grade', 'Выберите категорию...');
+
+    // Для размеров с кастомным форматом добавления
+    $('.select2-lumberdim').select2({
+        theme: 'bootstrap-5',
+        dropdownParent: $('#addModal'),
+        placeholder: 'Выберите размер...',
+        allowClear: true,
+        ajax: {
+            url: API_URLS.lumberdim.search,
+            dataType: 'json',
+            delay: 250,
+            data: function(params) {
+                return { term: params.term };
+            },
+            processResults: function(data) {
+                return { results: data.results };
+            }
+        },
+        tags: true,
+        createTag: function(params) {
+            const term = params.term.trim();
+            // Проверяем формат: Толщина-Ширина-Длина
+            const parts = term.split('-');
+            if (parts.length === 3 && parts.every(p => !isNaN(p) && p > 0)) {
+                return {
+                    id: term,
+                    text: term,
+                    newTag: true
+                };
+            }
+            return null;
+        },
+        templateResult: function(data) {
+            if (data.newTag) {
+                return $('<span>➕ Добавить размер: ' + data.text + '</span>');
+            }
+            return data.text;
+        }
+    }).on('select2:select', function(e) {
+        if (e.params.data.newTag) {
+            const parts = e.params.data.text.split('-');
+            fetch(API_URLS.lumberdim.add, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    thickness: parseInt(parts[0]),
+                    width: parseInt(parts[1]),
+                    length: parseInt(parts[2])
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.id) {
+                    const newOption = new Option(data.text, data.id, true, true);
+                    $('.select2-lumberdim').append(newOption).trigger('change');
+                } else {
+                    alert('Ошибка добавления размера: ' + (data.error || 'Неизвестная ошибка'));
+                }
+            });
+        }
+    });
+
+    $('.select2-unitdim').select2({
+        theme: 'bootstrap-5',
+        dropdownParent: $('#addModal'),
+        placeholder: 'Выберите размер...',
+        allowClear: true,
+        ajax: {
+            url: API_URLS.unitdim.search,
+            dataType: 'json',
+            delay: 250,
+            data: function(params) {
+                return { term: params.term };
+            },
+            processResults: function(data) {
+                return { results: data.results };
+            }
+        },
+        tags: true,
+        createTag: function(params) {
+            const term = params.term.trim();
+            const parts = term.split('-');
+            if (parts.length === 3 && parts.every(p => !isNaN(p) && p > 0)) {
+                return {
+                    id: term,
+                    text: term,
+                    newTag: true
+                };
+            }
+            return null;
+        },
+        templateResult: function(data) {
+            if (data.newTag) {
+                return $('<span>➕ Добавить размер: ' + data.text + '</span>');
+            }
+            return data.text;
+        }
+    }).on('select2:select', function(e) {
+        if (e.params.data.newTag) {
+            const parts = e.params.data.text.split('-');
+            fetch(API_URLS.unitdim.add, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    length: parseInt(parts[0]),
+                    width: parseInt(parts[1]),
+                    height: parseInt(parts[2])
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.id) {
+                    const newOption = new Option(data.text, data.id, true, true);
+                    $('.select2-unitdim').append(newOption).trigger('change');
+                } else {
+                    alert('Ошибка добавления размера: ' + (data.error || 'Неизвестная ошибка'));
+                }
+            });
+        }
+    });
+
+    // Показ/скрытие полей размеров
+    $('#dimension_type').on('change', function() {
+        const val = $(this).val();
+        $('#lumber_dim_row').hide();
+        $('#unit_dim_row').hide();
+        $('#lumber_dim').prop('required', false);
+        $('#unit_dim').prop('required', false);
+
+        if (val === 'lumber') {
+            $('#lumber_dim_row').show();
+            $('#lumber_dim').prop('required', true);
+        } else if (val === 'unit') {
+            $('#unit_dim_row').show();
+            $('#unit_dim').prop('required', true);
+        }
+    });
+
+    // Поиск в таблице
+    const searchInput = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('clearSearch');
+    const tableBody = document.getElementById('tableBody');
+    let rows = Array.from(tableBody.querySelectorAll('tr:not(#emptyRow)'));
+    const emptyRow = document.getElementById('emptyRow');
+
+    function updateRows() {
+        rows = Array.from(tableBody.querySelectorAll('tr:not(#emptyRow)'));
+    }
+
+    function filterTable() {
+        updateRows();
+        const searchTerm = searchInput.value.toLowerCase().trim();
+        let hasVisibleRows = false;
+
+        rows.forEach(row => {
+            const searchText = row.getAttribute('data-search') || '';
+            if (searchTerm === '' || searchText.includes(searchTerm)) {
+                row.style.display = '';
+                hasVisibleRows = true;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        let noResultsRow = document.getElementById('noResultsRow');
+        if (searchTerm !== '' && !hasVisibleRows) {
+            if (!noResultsRow) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noResultsRow';
+                noResultsRow.innerHTML = '<td colspan="6" class="text-center text-muted py-4">🔍 Ничего не найдено</td>';
+                tableBody.appendChild(noResultsRow);
+            }
+        } else if (noResultsRow) {
+            noResultsRow.remove();
+        }
+
+        if (emptyRow && rows.length === 0) {
+            emptyRow.style.display = searchTerm === '' ? '' : 'none';
+        }
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', filterTable);
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterTable();
+                searchInput.focus();
+            });
+        }
+    }
+
+    // Получение CSRF токена
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+});
+</script>
+<script>
+    // Поиск в таблице
+    const searchInput = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('clearSearch');
+    const tableBody = document.getElementById('tableBody');
+    let rows = Array.from(tableBody.querySelectorAll('tr:not(#emptyRow)'));
+    const emptyRow = document.getElementById('emptyRow');
+
+    function updateRows() {
+        rows = Array.from(tableBody.querySelectorAll('tr:not(#emptyRow)'));
+    }
+
+    function filterTable() {
+        updateRows();
+        const searchTerm = searchInput.value.toLowerCase().trim();
+        let hasVisibleRows = false;
+
+        rows.forEach(row => {
+            const searchText = row.getAttribute('data-search') || '';
+            if (searchTerm === '' || searchText.includes(searchTerm)) {
+                row.style.display = '';
+                hasVisibleRows = true;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        let noResultsRow = document.getElementById('noResultsRow');
+        if (searchTerm !== '' && !hasVisibleRows) {
+            if (!noResultsRow) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'noResultsRow';
+                noResultsRow.innerHTML = '<td colspan="7" class="text-center text-muted py-4">🔍 Ничего не найдено</td>';
+                tableBody.appendChild(noResultsRow);
+            }
+        } else if (noResultsRow) {
+            noResultsRow.remove();
+        }
+
+        if (emptyRow && rows.length === 0) {
+            emptyRow.style.display = searchTerm === '' ? '' : 'none';
+        }
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', filterTable);
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterTable();
+                searchInput.focus();
+            });
+        }
+    }
+</script>
+{% endblock %}
