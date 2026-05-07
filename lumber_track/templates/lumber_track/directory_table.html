@@ -10,7 +10,6 @@
             <h1 class="h2 mb-3">
                 {{ title }}
             </h1>
-
         </div>
         <div>
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
@@ -28,6 +27,7 @@
                     <thead class="table-light">
                         <tr>
                             <th>Название</th>
+                            {% if show_code %}<th>Код</th>{% endif %}
                             <th style="width: 100px;">Действия</th>
                         </tr>
                     </thead>
@@ -43,6 +43,9 @@
                                     {{ item }}
                                 {% endif %}
                             </td>
+                            {% if show_code %}
+                            <td>{% if item.code %}{{ item.code }}{% else %}—{% endif %}72
+                            {% endif %}
                             <td>
                                 <button type="button"
                                         class="btn btn-sm btn-outline-primary edit-btn"
@@ -56,13 +59,12 @@
                                    onclick="return confirm('Удалить запись?')">
                                     <i class="bi bi-trash"></i>
                                 </a>
-                            </td>
+
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="2" class="text-center text-muted py-4">
-                                Нет записей. Нажмите "Добавить" для создания первой записи.
-                            </td>
+
+
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -89,6 +91,18 @@
                         <label for="name" class="form-label">Название</label>
                         <input type="text" class="form-control" id="name" name="name" required autofocus>
                     </div>
+                    {% if show_code %}
+                    <div class="mb-3">
+                        <label for="code" class="form-label">Код</label>
+                        <input type="text" class="form-control" id="code" name="code">
+                    </div>
+                    {% endif %}
+                    {% if show_description %}
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Описание</label>
+                        <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -116,6 +130,18 @@
                         <label for="edit_name" class="form-label">Название</label>
                         <input type="text" class="form-control" id="edit_name" name="name" required>
                     </div>
+                    {% if show_code %}
+                    <div class="mb-3">
+                        <label for="edit_code" class="form-label">Код</label>
+                        <input type="text" class="form-control" id="edit_code" name="code">
+                    </div>
+                    {% endif %}
+                    {% if show_description %}
+                    <div class="mb-3">
+                        <label for="edit_description" class="form-label">Описание</label>
+                        <textarea class="form-control" id="edit_description" name="description" rows="2"></textarea>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -135,6 +161,8 @@
         editBaseUrl = '/directories/woodspecies/';
     } else if (window.location.pathname.includes('/qualitygrade/')) {
         editBaseUrl = '/directories/qualitygrade/';
+    } else if (window.location.pathname.includes('/storagelocation/')) {
+        editBaseUrl = '/directories/storagelocation/';
     }
 
     document.querySelectorAll('.edit-btn').forEach(button => {

@@ -18,7 +18,101 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import ProductType, WoodSpecies, QualityGrade, ProductName, UnitDimension, LumberDimension, ProductItem
 
+# lumber_track/views.py - добавьте в начало файла
 
+from django.db import connection
+
+
+# lumber_track/views.py
+
+def get_available_stocks_with_details(location_id=None, exclude_document_id=None):
+    """Возвращает позиции с остатками и деталями для селекта расхода"""
+
+    query = """
+        WITH stock_calc AS (
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY pn.name, ws.name, qg.code) as id,
+                di.product_name_id,
+                pn.name as product_name,
+                di.species_id,
+                ws.name as species,
+                di.grade_id,
+                qg.code as grade,
+                di.lumber_dim_id,
+                ld.thickness,
+                ld.width,
+                ld.length,
+                di.unit_dim_id,
+                ud.length as unit_length,
+                ud.width as unit_width,
+                ud.height as unit_height,
+                COALESCE(SUM(CASE WHEN d.doc_type = 1 THEN di.quantity ELSE 0 END), 0) +
+                COALESCE(SUM(CASE WHEN d.doc_type = 2 THEN di.quantity ELSE 0 END), 0) -
+                COALESCE(SUM(CASE WHEN d.doc_type = 3 THEN di.quantity ELSE 0 END), 0) as balance
+            FROM lumber_track_documentitem di
+            JOIN lumber_track_document d ON di.document_id = d.id
+            JOIN lumber_track_productname pn ON di.product_name_id = pn.id
+            JOIN lumber_track_woodspecies ws ON di.species_id = ws.id
+            JOIN lumber_track_qualitygrade qg ON di.grade_id = qg.id
+            LEFT JOIN lumber_track_lumberdimension ld ON di.lumber_dim_id = ld.id
+            LEFT JOIN lumber_track_unitdimension ud ON di.unit_dim_id = ud.id
+            WHERE d.doc_date <= date('now')
+    """
+
+    if location_id:
+        query += f" AND d.location_id = {location_id}"
+
+    # Исключаем текущий документ из расчёта
+    if exclude_document_id:
+        query += f" AND d.id != {exclude_document_id}"
+
+    query += """
+            GROUP BY 
+                di.product_name_id, pn.name,
+                di.species_id, ws.name,
+                di.grade_id, qg.code,
+                di.lumber_dim_id, ld.thickness, ld.width, ld.length,
+                di.unit_dim_id, ud.length, ud.width, ud.height
+            HAVING balance > 0
+        )
+        SELECT 
+            id,
+            product_name_id,
+            product_name,
+            species_id,
+            species,
+            grade_id,
+            grade,
+            lumber_dim_id,
+            thickness,
+            width,
+            length,
+            unit_dim_id,
+            unit_length,
+            unit_width,
+            unit_height,
+            balance,
+            CASE 
+                WHEN lumber_dim_id IS NOT NULL THEN 
+                    thickness || '-' || width || '-' || length || ' мм'
+                ELSE 
+                    unit_length || '-' || unit_width || '-' || unit_height || ' мм'
+            END as dimension_display,
+            CASE 
+                WHEN lumber_dim_id IS NOT NULL THEN 'lumber'
+                ELSE 'unit'
+            END as dimension_type,
+            COALESCE(lumber_dim_id, unit_dim_id) as dimension_id
+        FROM stock_calc
+        ORDER BY product_name, species, grade, dimension_display
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query)
+        columns = [col[0] for col in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    return results
 # ========== ГЛАВНАЯ И СПРАВОЧНИКИ ==========
 def home_view(request):
     return render(request, 'lumber_track/home.html')
@@ -546,3 +640,477 @@ def api_search_unitdim(request):
     )[:20]
     results = [{'id': item.id, 'text': f"{item.length}-{item.width}-{item.height} мм"} for item in items]
     return JsonResponse({'results': results})
+
+
+def documents_page(request):
+    """Страница с карточками документов"""
+    return render(request, 'lumber_track/documents.html')
+
+
+# lumber_track/views.py - добавьте функции
+
+from .models import Document, DocumentItem
+from django.db.models import Q
+
+
+def document_journal(request, doc_type):
+    """Универсальный журнал документов"""
+    doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc_type, 'Документы')
+    documents = Document.objects.filter(doc_type=doc_type).prefetch_related('items').order_by('-doc_date',
+                                                                                              '-created_at')
+
+    # Для каждой записи добавляем флаг has_items
+    for doc in documents:
+        doc.has_items = doc.items.exists()
+
+    context = {
+        'title': doc_type_name,
+        'documents': documents,
+        'doc_type': doc_type,
+        'delete_url': 'lumber_track:document_delete',
+    }
+    return render(request, 'lumber_track/document_journal.html', context)
+
+
+def document_delete(request, pk):
+    """Удаление документа только если нет позиций"""
+    doc = get_object_or_404(Document, pk=pk)
+
+    # Сохраняем тип для перенаправления
+    doc_type = doc.doc_type
+    doc_number = doc.doc_number
+
+    # Проверяем, есть ли позиции
+    if doc.items.exists():
+        messages.error(request,
+                       f'❌ Невозможно удалить документ "{doc_number}", так как он содержит позиции. Сначала удалите все позиции.')
+    else:
+        doc.delete()
+        messages.success(request, f'✅ Документ "{doc_number}" успешно удален.')
+
+    # Перенаправляем в соответствующий журнал
+    if doc_type == 1:
+        return redirect('lumber_track:document_initial_journal')
+    elif doc_type == 2:
+        return redirect('lumber_track:document_income_journal')
+    else:
+        return redirect('lumber_track:document_outcome_journal')
+
+
+# lumber_track/views.py - функция document_create
+
+# lumber_track/views.py
+# lumber_track/views.py
+
+# lumber_track/views.py
+
+# lumber_track/views.py
+
+def document_create(request, doc_type):
+    """Создание документа"""
+    doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc_type, 'Документ')
+
+    if request.method == 'POST':
+        doc_number = request.POST.get('doc_number', '').strip()
+
+        # Проверяем уникальность комбинации тип + номер
+        if Document.objects.filter(doc_type=doc_type, doc_number=doc_number).exists():
+            messages.error(request, f'Документ с номером "{doc_number}" для данного типа документа уже существует!')
+            context = {
+                'doc_type': doc_type,
+                'doc_type_name': doc_type_name,
+                'product_names': ProductName.objects.all().select_related('product_type'),
+                'species_list': WoodSpecies.objects.all().order_by('name'),
+                'grades_list': QualityGrade.objects.all().order_by('code'),
+                'lumber_dims': LumberDimension.objects.all().order_by('thickness', 'width', 'length'),
+                'unit_dims': UnitDimension.objects.all().order_by('length', 'width', 'height'),
+                'locations': StorageLocation.objects.all().order_by('name'),
+            }
+            # Для расхода нужен другой шаблон при ошибке
+            if doc_type == 3:
+                available_stocks = get_available_stocks_with_details()
+                context['available_stocks'] = available_stocks
+                return render(request, 'lumber_track/document_outcome_form.html', context)
+            return render(request, 'lumber_track/document_form.html', context)
+
+        # Определяем location_id ДО создания документа
+        location_id = request.POST.get('location')
+
+        # Для начальных остатков
+        if not location_id and doc_type == 1:
+            location_id = 2  # ID склада готовой продукции
+
+        # Для расхода - автоматически подставляем склад (откуда списываем)
+        if not location_id and doc_type == 3:
+            location_id = 2  # ID склада готовой продукции
+
+        # Создаем документ
+        doc = Document.objects.create(
+            doc_type=doc_type,
+            doc_number=doc_number,
+            doc_date=request.POST.get('doc_date'),
+            note=request.POST.get('note', ''),
+            location_id=location_id
+        )
+
+        # Для расхода - обрабатываем позиции с остатками
+        if doc_type == 3:  # Расход
+            stock_items = request.POST.getlist('stock_item[]')
+            quantities = request.POST.getlist('quantity[]')
+            product_names = request.POST.getlist('product_name[]')
+            species_list = request.POST.getlist('species[]')
+            grades_list = request.POST.getlist('grade[]')
+            dimension_ids = request.POST.getlist('dimension_id[]')
+            dimension_types = request.POST.getlist('dimension_type[]')
+
+            # Сохраняем "куда перемещается" в примечание
+            to_location_id = request.POST.get('to_location')
+            if to_location_id:
+                to_location = StorageLocation.objects.get(id=to_location_id)
+                note_text = request.POST.get('note', '')
+                new_note = f"{note_text}\nПеремещено в: {to_location.name}" if note_text else f"Перемещено в: {to_location.name}"
+                doc.note = new_note
+                doc.save()
+
+            for i in range(len(stock_items)):
+                if not stock_items[i]:
+                    continue
+
+                quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
+                if quantity == 0:
+                    continue
+
+                product_name_id = product_names[i] if i < len(product_names) else None
+                species_id = species_list[i] if i < len(species_list) else None
+                grade_id = grades_list[i] if i < len(grades_list) else None
+                dimension_id = dimension_ids[i] if i < len(dimension_ids) else None
+                dimension_type = dimension_types[i] if i < len(dimension_types) else None
+
+                lumber_dim_id = None
+                unit_dim_id = None
+
+                if dimension_type == 'lumber':
+                    lumber_dim_id = dimension_id
+                elif dimension_type == 'unit':
+                    unit_dim_id = dimension_id
+
+                DocumentItem.objects.create(
+                    document=doc,
+                    product_name_id=product_name_id,
+                    species_id=species_id,
+                    grade_id=grade_id,
+                    lumber_dim_id=lumber_dim_id,
+                    unit_dim_id=unit_dim_id,
+                    quantity=quantity
+                )
+        else:
+            # Для начальных остатков и прихода - обычная обработка
+            product_names = request.POST.getlist('product_name[]')
+            species_list = request.POST.getlist('species[]')
+            grades_list = request.POST.getlist('grade[]')
+            dimension_ids = request.POST.getlist('dimension_id[]')
+            dimension_types = request.POST.getlist('dimension_type[]')
+            quantities = request.POST.getlist('quantity[]')
+
+            for i in range(len(product_names)):
+                if not product_names[i] or not species_list[i] or not grades_list[i]:
+                    continue
+
+                quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
+                if quantity == 0:
+                    continue
+
+                lumber_dim_id = None
+                unit_dim_id = None
+
+                if i < len(dimension_ids) and dimension_ids[i]:
+                    if i < len(dimension_types) and dimension_types[i] == 'lumber':
+                        lumber_dim_id = dimension_ids[i]
+                    elif i < len(dimension_types) and dimension_types[i] == 'unit':
+                        unit_dim_id = dimension_ids[i]
+
+                DocumentItem.objects.create(
+                    document=doc,
+                    product_name_id=product_names[i],
+                    species_id=species_list[i],
+                    grade_id=grades_list[i],
+                    lumber_dim_id=lumber_dim_id,
+                    unit_dim_id=unit_dim_id,
+                    quantity=quantity
+                )
+
+        # Перенаправляем в журнал
+        redirect_urls = {
+            1: 'lumber_track:document_initial_journal',
+            2: 'lumber_track:document_income_journal',
+            3: 'lumber_track:document_outcome_journal',
+        }
+        return redirect(redirect_urls.get(doc_type, 'lumber_track:document_initial_journal'))
+
+    # ========== GET ЗАПРОС ==========
+    context = {
+        'doc_type': doc_type,
+        'doc_type_name': doc_type_name,
+        'product_names': ProductName.objects.all().select_related('product_type'),
+        'species_list': WoodSpecies.objects.all().order_by('name'),
+        'grades_list': QualityGrade.objects.all().order_by('code'),
+        'lumber_dims': LumberDimension.objects.all().order_by('thickness', 'width', 'length'),
+        'unit_dims': UnitDimension.objects.all().order_by('length', 'width', 'height'),
+        'locations': StorageLocation.objects.all().order_by('name'),
+    }
+
+    # Выбираем шаблон в зависимости от типа документа
+    if doc_type == 3:  # Расход
+        available_stocks = get_available_stocks_with_details()
+        context['available_stocks'] = available_stocks
+        return render(request, 'lumber_track/document_outcome_form.html', context)
+    else:
+        return render(request, 'lumber_track/document_form.html', context)
+# API для получения данных о размере (для расчета объема и площади)
+def api_get_lumberdim_data(request, pk):
+    """Получение данных размера погонажа для расчета"""
+    dim = get_object_or_404(LumberDimension, pk=pk)
+    return JsonResponse({
+        'volume': dim.volume_m3,
+        'area': dim.area_m2
+    })
+
+
+# API для быстрого добавления новых справочников
+@csrf_exempt
+def api_add_dimension(request):
+    """Быстрое добавление размера погонажа"""
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        thickness = int(data.get('thickness'))
+        width = int(data.get('width'))
+        length = int(data.get('length'))
+
+        obj, created = LumberDimension.objects.get_or_create(
+            thickness=thickness,
+            width=width,
+            length=length
+        )
+        return JsonResponse({
+            'id': obj.id,
+            'volume': obj.volume_m3,
+            'area': obj.area_m2
+        })
+    return JsonResponse({'error': 'Ошибка'}, status=400)
+
+
+@csrf_exempt
+def api_add_productname(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        name = data.get('name', '').strip()
+        # Для простоты берем первый тип продукции
+        product_type = ProductType.objects.first()
+        if name and product_type:
+            obj, created = ProductName.objects.get_or_create(
+                name=name,
+                defaults={'product_type': product_type}
+            )
+            return JsonResponse({'id': obj.id, 'text': obj.name})
+    return JsonResponse({'error': 'Ошибка'}, status=400)
+
+
+# lumber_track/views.py - добавьте
+
+from .models import StorageLocation
+
+
+# ========== МЕСТА ХРАНЕНИЯ ==========
+# lumber_track/views.py
+
+def storagelocation_list(request):
+    items = StorageLocation.objects.all().order_by('name')
+    context = {
+        'title': 'Места хранения',
+        'items': items,
+        'create_url': '/directories/storagelocation/create/',
+        'delete_url': 'lumber_track:storagelocation_delete',
+    }
+    return render(request, 'lumber_track/directory_table.html', context)
+
+def storagelocation_create(request):
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        if name:
+            StorageLocation.objects.create(name=name)
+    return redirect('lumber_track:storagelocation_list')
+
+def storagelocation_edit(request, pk):
+    item = get_object_or_404(StorageLocation, pk=pk)
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        if name:
+            item.name = name
+            item.save()
+    return redirect('lumber_track:storagelocation_list')
+
+def storagelocation_delete(request, pk):
+    item = get_object_or_404(StorageLocation, pk=pk)
+    item.delete()
+    return redirect('lumber_track:storagelocation_list')
+
+def storagelocation_data(request, pk):
+    item = get_object_or_404(StorageLocation, pk=pk)
+    return JsonResponse({'name': item.name})
+
+
+# lumber_track/views.py
+
+# lumber_track/views.py
+
+def document_edit(request, pk):
+    """Редактирование документа"""
+    doc = get_object_or_404(Document, pk=pk)
+    doc_type = doc.doc_type
+    doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc_type, 'Документ')
+
+    # Для расхода - извлекаем "куда перемещается" из примечания
+    to_location_id = None
+    to_location_name = None
+    original_note = doc.note
+
+    if doc_type == 3 and doc.note:
+        # Ищем "Перемещено в:" в примечании
+        import re
+        match = re.search(r'Перемещено в: (.+)', doc.note)
+        if match:
+            to_location_name = match.group(1).strip()
+            # Убираем эту строку из примечания для отображения
+            original_note = re.sub(r'\n?Перемещено в: .+', '', doc.note).strip()
+
+    if request.method == 'POST':
+        # Обновляем шапку документа
+        doc.doc_number = request.POST.get('doc_number')
+        doc.doc_date = request.POST.get('doc_date')
+
+        # Для расхода - сохраняем "куда перемещается"
+        if doc_type == 3:
+            to_location_id = request.POST.get('to_location')
+            to_location = StorageLocation.objects.get(id=to_location_id)
+            note_text = request.POST.get('note', '')
+            new_note = f"{note_text}\nПеремещено в: {to_location.name}" if note_text else f"Перемещено в: {to_location.name}"
+            doc.note = new_note
+        else:
+            doc.note = request.POST.get('note', '')
+
+        doc.save()
+
+        # Удаляем старые позиции
+        doc.items.all().delete()
+
+        if doc_type == 3:  # Расход
+            # Сохраняем позиции из формы расхода
+            stock_items = request.POST.getlist('stock_item[]')
+            quantities = request.POST.getlist('quantity[]')
+            product_names = request.POST.getlist('product_name[]')
+            species_list = request.POST.getlist('species[]')
+            grades_list = request.POST.getlist('grade[]')
+            dimension_ids = request.POST.getlist('dimension_id[]')
+            dimension_types = request.POST.getlist('dimension_type[]')
+
+            for i in range(len(stock_items)):
+                if not stock_items[i]:
+                    continue
+
+                quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
+                if quantity == 0:
+                    continue
+
+                product_name_id = product_names[i] if i < len(product_names) else None
+                species_id = species_list[i] if i < len(species_list) else None
+                grade_id = grades_list[i] if i < len(grades_list) else None
+                dimension_id = dimension_ids[i] if i < len(dimension_ids) else None
+                dimension_type = dimension_types[i] if i < len(dimension_types) else None
+
+                lumber_dim_id = None
+                unit_dim_id = None
+
+                if dimension_type == 'lumber':
+                    lumber_dim_id = dimension_id
+                elif dimension_type == 'unit':
+                    unit_dim_id = dimension_id
+
+                DocumentItem.objects.create(
+                    document=doc,
+                    product_name_id=product_name_id,
+                    species_id=species_id,
+                    grade_id=grade_id,
+                    lumber_dim_id=lumber_dim_id,
+                    unit_dim_id=unit_dim_id,
+                    quantity=quantity
+                )
+        else:
+            # Для начальных остатков и прихода
+            product_names = request.POST.getlist('product_name[]')
+            species_list = request.POST.getlist('species[]')
+            grades_list = request.POST.getlist('grade[]')
+            dimension_ids = request.POST.getlist('dimension_id[]')
+            dimension_types = request.POST.getlist('dimension_type[]')
+            quantities = request.POST.getlist('quantity[]')
+
+            for i in range(len(product_names)):
+                if not product_names[i] or not species_list[i] or not grades_list[i]:
+                    continue
+
+                quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
+                if quantity == 0:
+                    continue
+
+                lumber_dim_id = None
+                unit_dim_id = None
+
+                if i < len(dimension_ids) and dimension_ids[i]:
+                    if i < len(dimension_types) and dimension_types[i] == 'lumber':
+                        lumber_dim_id = dimension_ids[i]
+                    elif i < len(dimension_types) and dimension_types[i] == 'unit':
+                        unit_dim_id = dimension_ids[i]
+
+                DocumentItem.objects.create(
+                    document=doc,
+                    product_name_id=product_names[i],
+                    species_id=species_list[i],
+                    grade_id=grades_list[i],
+                    lumber_dim_id=lumber_dim_id,
+                    unit_dim_id=unit_dim_id,
+                    quantity=quantity
+                )
+
+        # Перенаправляем в журнал
+        redirect_urls = {
+            1: 'lumber_track:document_initial_journal',
+            2: 'lumber_track:document_income_journal',
+            3: 'lumber_track:document_outcome_journal',
+        }
+        return redirect(redirect_urls.get(doc_type, 'lumber_track:document_initial_journal'))
+
+    # GET запрос
+    context = {
+        'doc': doc,
+        'doc_type': doc_type,
+        'doc_type_name': doc_type_name,
+        'original_note': original_note,
+        'to_location_name': to_location_name,
+        'product_names': ProductName.objects.all().select_related('product_type'),
+        'species_list': WoodSpecies.objects.all().order_by('name'),
+        'grades_list': QualityGrade.objects.all().order_by('code'),
+        'lumber_dims': LumberDimension.objects.all().order_by('thickness', 'width', 'length'),
+        'unit_dims': UnitDimension.objects.all().order_by('length', 'width', 'height'),
+        'locations': StorageLocation.objects.all().order_by('name'),
+        'items': doc.items.all().select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'),
+    }
+
+    # Для расхода - добавляем остатки (исключая текущий документ)
+    if doc_type == 3:
+        available_stocks = get_available_stocks_with_details(
+            location_id=2,  # склад
+            exclude_document_id=doc.id  # <-- ЭТО ГЛАВНОЕ: исключаем текущий документ
+        )
+        context['available_stocks'] = available_stocks
+        return render(request, 'lumber_track/document_outcome_edit.html', context)
+    else:
+        return render(request, 'lumber_track/document_edit.html', context)

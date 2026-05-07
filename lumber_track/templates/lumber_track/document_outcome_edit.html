@@ -1,0 +1,268 @@
+<!-- lumber_track/templates/lumber_track/document_outcome_edit.html -->
+{% extends 'lumber_track/base.html' %}
+{% load static %}
+
+{% block title %}Редактировать {{ doc_type_name }} №{{ doc.doc_number }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="h2 mb-3"><i class="bi bi-pencil-square"></i> Редактировать {{ doc_type_name }}</h1>
+        <p class="text-muted">Документ №{{ doc.doc_number }} от {{ doc.doc_date|date:"d.m.Y" }}</p>
+        <hr>
+    </div>
+</div>
+
+<form method="post" id="documentForm">
+    {% csrf_token %}
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="doc_number" class="form-label">Номер документа *</label>
+                    <input type="text" class="form-control" id="doc_number" name="doc_number" value="{{ doc.doc_number }}" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="doc_date" class="form-label">Дата документа *</label>
+                    <input type="date" class="form-control" id="doc_date" name="doc_date" value="{{ doc.doc_date|date:'Y-m-d' }}" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="to_location" class="form-label">Куда перемещается *</label>
+                    <select class="form-select" id="to_location" name="to_location" required>
+                        <option value="">Выберите место...</option>
+                        {% for loc in locations %}
+                        {% if loc.id != 2 %}
+                        <option value="{{ loc.id }}" {% if to_location_name == loc.name %}selected{% endif %}>{{ loc.name }}</option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-12 mb-3">
+                    <label for="note" class="form-label">Примечание</label>
+                    <input type="text" class="form-control" id="note" name="note" value="{{ original_note }}">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Позиции документа</h5>
+            <button type="button" class="btn btn-sm btn-success" id="addRowBtn">
+                <i class="bi bi-plus-circle"></i> Добавить строку
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width: 350px;">Выберите позицию (остаток)</th>
+                            <th style="min-width: 120px;">Кол-во (шт)</th>
+                            <th style="min-width: 100px;">Доступно</th>
+                            <th style="min-width: 120px;">Объем (м³)</th>
+                            <th style="min-width: 100px;">Площадь (м²)</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsBody">
+                        {% for item in items %}
+                        <tr class="item-row">
+                            <td>
+                                <select class="form-select stock-select" name="stock_item[]" style="width: 100%;" required>
+                                    <option value="">Выберите позицию...</option>
+                                    {% for stock in available_stocks %}
+                                    <option value="{{ stock.id }}"
+                                        data-product-name="{{ stock.product_name }}"
+                                        data-product-name-id="{{ stock.product_name_id }}"
+                                        data-species="{{ stock.species }}"
+                                        data-species-id="{{ stock.species_id }}"
+                                        data-grade="{{ stock.grade }}"
+                                        data-grade-id="{{ stock.grade_id }}"
+                                        data-dimension-type="{{ stock.dimension_type }}"
+                                        data-dimension-id="{{ stock.dimension_id }}"
+                                        data-balance="{{ stock.balance }}"
+                                        {% if stock.product_name_id == item.product_name.id and stock.species_id == item.species.id and stock.grade_id == item.grade.id and stock.dimension_id == item.lumber_dim.id %}selected{% endif %}>
+                                       {{ stock.product_name }} | {{ stock.dimension_display }} | {{ stock.species }} | {{ stock.grade }} | Остаток: {{ stock.balance }} шт
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <input type="hidden" class="product-name-hidden" name="product_name[]" value="{{ item.product_name.id }}">
+                                <input type="hidden" class="species-hidden" name="species[]" value="{{ item.species.id }}">
+                                <input type="hidden" class="grade-hidden" name="grade[]" value="{{ item.grade.id }}">
+                                <input type="hidden" class="dimension-type-hidden" name="dimension_type[]" value="{% if item.lumber_dim %}lumber{% else %}unit{% endif %}">
+                                <input type="hidden" class="dimension-id-hidden" name="dimension_id[]" value="{% if item.lumber_dim %}{{ item.lumber_dim.id }}{% else %}{{ item.unit_dim.id }}{% endif %}">
+
+                            </td>
+                            <td>
+                                <input type="number" class="form-control quantity-input" name="quantity[]" placeholder="Кол-во" step="1" min="1" value="{{ item.quantity }}">
+                            </td>
+                            <td>
+                                <span class="balance-display badge bg-info">0</span>
+                            </td>
+                            <td>
+                                <span class="volume-display">{% if item.volume_m3 > 0 %}{{ item.volume_m3|floatformat:6 }}{% else %}—{% endif %}</span>
+                                <input type="hidden" class="volume-hidden" name="volume[]" value="{{ item.volume_m3|floatformat:6 }}">
+                            </td>
+                            <td>
+                                <span class="area-display">{% if item.area_m2 > 0 %}{{ item.area_m2|floatformat:3 }}{% else %}—{% endif %}</span>
+                                <input type="hidden" class="area-hidden" name="area[]" value="{{ item.area_m2|floatformat:3 }}">
+                            </td>
+                            <td class="text-center">
+                                <i class="bi bi-trash text-danger remove-row" style="cursor: pointer; font-size: 1.2rem;"></i>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-white text-end">
+            <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+            <a href="{% url 'lumber_track:document_outcome_journal' %}" class="btn btn-secondary">Отмена</a>
+        </div>
+    </div>
+</form>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script>
+$(document).ready(function() {
+    const lumberDimensions = {
+        {% for ld in lumber_dims %}
+        {{ ld.id }}: {
+            volume: {{ ld.volume_m3|stringformat:"f" }},
+            area: {{ ld.area_m2|stringformat:"f" }},
+            display: "{{ ld.thickness }}-{{ ld.width }}-{{ ld.length }} мм"
+        },
+        {% endfor %}
+    };
+
+    function calculateRow(row) {
+        const stockSelect = row.find('.stock-select');
+        const selectedOption = stockSelect.find('option:selected');
+        const dimensionType = selectedOption.data('dimension-type');
+        const dimensionId = selectedOption.data('dimension-id');
+        const quantity = row.find('.quantity-input').val();
+        const quantityNum = parseFloat(quantity) || 0;
+        const balance = parseFloat(selectedOption.data('balance')) || 0;
+        const volumeSpan = row.find('.volume-display');
+        const areaSpan = row.find('.area-display');
+        const volumeHidden = row.find('.volume-hidden');
+        const areaHidden = row.find('.area-hidden');
+        const balanceSpan = row.find('.balance-display');
+
+        balanceSpan.text(balance);
+
+        row.find('.invalid-feedback').remove();
+        if (quantityNum > balance) {
+            row.find('.quantity-input').addClass('is-invalid');
+            row.find('.quantity-input').after(`<div class="invalid-feedback">Недостаточно остатка. Доступно: ${balance} шт</div>`);
+        } else {
+            row.find('.quantity-input').removeClass('is-invalid');
+        }
+
+        if (dimensionType === 'lumber' && dimensionId && lumberDimensions[dimensionId] && quantityNum) {
+            const volume = lumberDimensions[dimensionId].volume * quantityNum;
+            const area = lumberDimensions[dimensionId].area * quantityNum;
+            volumeSpan.text(volume.toFixed(6));
+            areaSpan.text(area.toFixed(3));
+            volumeHidden.val(volume.toFixed(6));
+            areaHidden.val(area.toFixed(3));
+        } else {
+            volumeSpan.text('—');
+            areaSpan.text('—');
+            volumeHidden.val('0');
+            areaHidden.val('0');
+        }
+    }
+
+    function initRow(row) {
+        const stockSelect = row.find('.stock-select');
+        const selectedInfo = row.find('.selected-info');
+
+        stockSelect.off('change').on('change', function() {
+            const selectedOption = $(this).find('option:selected');
+            if (selectedOption.val()) {
+                row.find('.product-name-hidden').val(selectedOption.data('product-name-id'));
+                row.find('.species-hidden').val(selectedOption.data('species-id'));
+                row.find('.grade-hidden').val(selectedOption.data('grade-id'));
+                row.find('.dimension-type-hidden').val(selectedOption.data('dimension-type'));
+                row.find('.dimension-id-hidden').val(selectedOption.data('dimension-id'));
+                selectedInfo.text(`${selectedOption.data('product-name')} | ${selectedOption.data('species')} | ${selectedOption.data('grade')}`);
+            } else {
+                selectedInfo.text('');
+            }
+            calculateRow(row);
+        });
+
+        row.find('.quantity-input').off('input').on('input', function() {
+            calculateRow(row);
+        });
+
+        if (stockSelect.val()) {
+            calculateRow(row);
+            const selectedOption = stockSelect.find('option:selected');
+            selectedInfo.text(`${selectedOption.data('product-name')} | ${selectedOption.data('species')} | ${selectedOption.data('grade')}`);
+        }
+    }
+
+    function addNewRow() {
+        const newRow = $('.item-row:first').clone();
+        newRow.find('.stock-select').val('');
+        newRow.find('.quantity-input').val('');
+        newRow.find('.balance-display').text('0');
+        newRow.find('.volume-display, .area-display').text('—');
+        newRow.find('input[type="hidden"]').val('');
+        newRow.find('.selected-info').text('');
+        newRow.find('.is-invalid').removeClass('is-invalid');
+        newRow.find('.invalid-feedback').remove();
+        $('#itemsBody').append(newRow);
+        initRow(newRow);
+    }
+
+    $('.item-row').each(function() {
+        initRow($(this));
+    });
+
+    $('#addRowBtn').click(function() {
+        addNewRow();
+    });
+
+   // Удаление строки (разрешено удалять любые строки)
+$(document).on('click', '.remove-row', function() {
+    $(this).closest('.item-row').remove();
+});
+
+    $('#documentForm').on('submit', function(e) {
+        let valid = true;
+        $('.item-row').each(function(index) {
+            const stockId = $(this).find('.stock-select').val();
+            const quantity = $(this).find('.quantity-input').val();
+            const maxBalance = $(this).find('.stock-select option:selected').data('balance');
+            if (!stockId || !quantity || parseFloat(quantity) <= 0) {
+                valid = false;
+                $(this).addClass('invalid-row');
+            } else if (parseFloat(quantity) > maxBalance) {
+                valid = false;
+                $(this).addClass('invalid-row');
+            } else {
+                $(this).removeClass('invalid-row');
+            }
+        });
+
+        if (!$('#to_location').val()) {
+            alert('Выберите место, куда перемещается продукция');
+            valid = false;
+        }
+
+        if (!valid) {
+            alert('Заполните все строки корректно (количество не должно превышать остаток)');
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}

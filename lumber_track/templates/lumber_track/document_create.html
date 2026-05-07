@@ -1,0 +1,18 @@
+<!-- lumber_track/templates/lumber_track/document_create.html -->
+{% extends 'lumber_track/base.html' %}
+
+{% block title %}Создать {{ doc_type_name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            Создание документа "{{ doc_type_name }}" — в разработке
+        </div>
+        <a href="{% url 'lumber_track:document_initial_journal' %}" class="btn btn-secondary">
+            ← Вернуться в журнал
+        </a>
+    </div>
+</div>
+{% endblock %}

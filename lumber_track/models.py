@@ -37,6 +37,23 @@ class QualityGrade(models.Model):
         return self.code
 
 
+# lumber_track/models.py
+
+class StorageLocation(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name="Название")
+    is_active = models.BooleanField(default=True, verbose_name="Активно")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+
+    class Meta:
+        verbose_name = "Место хранения"
+        verbose_name_plural = "Места хранения"
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
 class ProductName(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="Наименование")
     product_type = models.ForeignKey(ProductType, on_delete=models.PROTECT, verbose_name="Тип продукции")
@@ -131,3 +148,135 @@ class ProductItem(models.Model):
 
     def __str__(self):
         return self.full_name
+
+
+# lumber_track/models.py
+
+class Document(models.Model):
+    DOCUMENT_TYPES = [
+        (1, 'Начальные остатки'),
+        (2, 'Приход (выпуск)'),
+        (3, 'Расход (отгрузка)'),
+    ]
+
+    doc_type = models.PositiveSmallIntegerField(choices=DOCUMENT_TYPES, verbose_name="Тип документа")
+    doc_number = models.CharField(max_length=50,  verbose_name="Номер документа")
+    doc_date = models.DateField(verbose_name="Дата документа")
+    note = models.TextField(blank=True, verbose_name="Примечание")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+
+    # Новое поле - место хранения
+    location = models.ForeignKey(
+        'StorageLocation',
+        on_delete=models.PROTECT,
+
+        verbose_name="Место хранения"
+    )
+
+    class Meta:
+        ordering = ['-doc_date', '-created_at']
+        verbose_name = "Документ"
+        verbose_name_plural = "Документы"
+        unique_together = ['doc_type', 'doc_number']
+
+    def __str__(self):
+        return f"{self.get_doc_type_display()} №{self.doc_number} от {self.doc_date}"
+
+
+
+class DocumentItem(models.Model):
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='items', verbose_name="Документ")
+
+    product_name = models.ForeignKey(ProductName, on_delete=models.PROTECT, verbose_name="Наименование")
+    species = models.ForeignKey(WoodSpecies, on_delete=models.PROTECT, verbose_name="Порода")
+    grade = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, verbose_name="Категория")
+    lumber_dim = models.ForeignKey(LumberDimension, on_delete=models.PROTECT, null=True, blank=True,
+                                   verbose_name="Размер (погонаж)")
+    unit_dim = models.ForeignKey(UnitDimension, on_delete=models.PROTECT, null=True, blank=True,
+                                 verbose_name="Размер (штучный)")
+
+    quantity = models.PositiveIntegerField(default=0, verbose_name="Количество (шт)")
+
+    class Meta:
+        verbose_name = "Позиция документа"
+        verbose_name_plural = "Позиции документов"
+
+    def __str__(self):
+        return f"{self.product_name.name} - {self.quantity} шт"
+
+    @property
+    def dimension_display(self):
+        if self.lumber_dim:
+            return f"{self.lumber_dim.thickness}-{self.lumber_dim.width}-{self.lumber_dim.length} мм"
+        elif self.unit_dim:
+            return f"{self.unit_dim.length}-{self.unit_dim.width}-{self.unit_dim.height} мм"
+        return "—"
+
+    @property
+    def volume_m3(self):
+        if self.lumber_dim:
+            return self.lumber_dim.volume_m3 * self.quantity
+        return 0
+
+    @property
+    def area_m2(self):
+        if self.lumber_dim:
+            return self.lumber_dim.area_m2 * self.quantity
+        return 0
+
+
+# lumber_track/models.py
+
+from django.db.models import Sum, Q
+from datetime import date
+
+
+def get_available_stocks(location_id=None, as_of_date=None):
+    """
+    Возвращает все позиции с актуальными остатками на складе
+    """
+    if as_of_date is None:
+        as_of_date = date.today()
+
+    # Получаем все уникальные комбинации из DocumentItem
+    # с группировкой по полям
+    from django.db import connection
+
+    # Формируем запрос на получение позиций с остатками
+    query = """
+        SELECT 
+            di.product_name_id,
+            di.species_id, 
+            di.grade_id,
+            di.lumber_dim_id,
+            di.unit_dim_id,
+            COALESCE(SUM(CASE WHEN d.doc_type = 1 THEN di.quantity ELSE 0 END), 0) +
+            COALESCE(SUM(CASE WHEN d.doc_type = 2 THEN di.quantity ELSE 0 END), 0) -
+            COALESCE(SUM(CASE WHEN d.doc_type = 3 THEN di.quantity ELSE 0 END), 0) as balance
+        FROM lumber_track_documentitem di
+        JOIN lumber_track_document d ON di.document_id = d.id
+        WHERE d.doc_date <= %s
+    """
+
+    params = [as_of_date]
+
+    if location_id:
+        query += " AND d.location_id = %s"
+        params.append(location_id)
+
+    query += """
+        GROUP BY 
+            di.product_name_id,
+            di.species_id, 
+            di.grade_id,
+            di.lumber_dim_id,
+            di.unit_dim_id
+        HAVING balance > 0
+        ORDER BY di.product_name_id
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+
+    return results

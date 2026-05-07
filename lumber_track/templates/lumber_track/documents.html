@@ -1,0 +1,75 @@
+<!-- lumber_track/templates/lumber_track/documents.html -->
+{% extends 'lumber_track/base.html' %}
+
+{% block title %}Документы{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="h2 mb-3">
+            <i class="bi bi-files"></i> Документы
+        </h1>
+        <p class="text-muted">Учет движения продукции</p>
+        <hr>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Начальные остатки -->
+    <div class="col-md-4">
+        <a href="{% url 'lumber_track:document_initial_journal' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-database text-success" style="font-size: 48px;"></i>
+                    <h4 class="card-title mt-3">Начальные остатки</h4>
+                    <p class="card-text text-muted mt-2">
+                        Ввод остатков на начало периода
+                    </p>
+                </div>
+
+            </div>
+        </a>
+    </div>
+
+    <!-- Приходные документы -->
+    <div class="col-md-4">
+        <a href="{% url 'lumber_track:document_income_journal' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-arrow-down-circle text-primary" style="font-size: 48px;"></i>
+                    <h4 class="card-title mt-3">Приходные документы</h4>
+                    <p class="card-text text-muted mt-2">
+                        Выпуск продукции, поступление на склад
+                    </p>
+                </div>
+
+            </div>
+        </a>
+    </div>
+
+    <!-- Расходные документы (передача) -->
+    <div class="col-md-4">
+       <a href="{% url 'lumber_track:document_outcome_journal' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-arrow-up-circle text-danger" style="font-size: 48px;"></i>
+                    <h4 class="card-title mt-3">Документы по передаче</h4>
+                    <p class="card-text text-muted mt-2">
+                        Отгрузка, списание, передача со склада
+                    </p>
+                </div>
+
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Дополнительная информация -->
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="alert alert-light border shadow-sm">
+
+        </div>
+    </div>
+</div>
+{% endblock %}

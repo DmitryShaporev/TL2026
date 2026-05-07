@@ -1,0 +1,332 @@
+<!-- lumber_track/templates/lumber_track/document_form.html -->
+{% extends 'lumber_track/base.html' %}
+{% load static %}
+
+{% block title %}Создать {{ doc_type_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="h2 mb-3"><i class="bi bi-plus-circle"></i> {{ doc_type_name }}</h1>
+        <p class="text-muted">Создание нового документа</p>
+        <hr>
+    </div>
+</div>
+
+<form method="post" id="documentForm">
+    {% csrf_token %}
+
+    <!-- Шапка документа -->
+    <!-- lumber_track/templates/lumber_track/document_form.html -->
+
+<!-- Шапка документа -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="doc_number" class="form-label">Номер документа *</label>
+                <input type="text" class="form-control" id="doc_number" name="doc_number" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="doc_date" class="form-label">Дата документа *</label>
+                <input type="date" class="form-control" id="doc_date" name="doc_date" value="{% now 'Y-m-d' %}" required>
+            </div>
+            <div class="col-md-4 mb-3">
+    <label for="location" class="form-label">Место хранения *</label>
+    <select class="form-select" id="location" name="location" required>
+        <option value="">Выберите место...</option>
+        {% for loc in locations %}
+        <option value="{{ loc.id }}" {% if doc_type == 1 and loc.id == 2 %}selected{% endif %}>
+            {{ loc.name }}
+        </option>
+        {% endfor %}
+    </select>
+</div>
+        </div>
+        <div class="row">
+            <div class="col-12 mb-3">
+                <label for="note" class="form-label">Примечание</label>
+                <input type="text" class="form-control" id="note" name="note">
+            </div>
+        </div>
+    </div>
+</div>
+    <!-- Табличная часть -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Позиции документа</h5>
+            <button type="button" class="btn btn-sm btn-success" id="addRowBtn">
+                <i class="bi bi-plus-circle"></i> Добавить строку
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width: 200px;">Наименование</th>
+                            <th style="min-width: 120px;">Порода</th>
+                            <th style="min-width: 100px;">Категория</th>
+                            <th style="min-width: 200px;">Размер</th>
+                            <th style="min-width: 100px;">Кол-во (шт)</th>
+                            <th style="min-width: 120px;">Объем (м³)</th>
+                            <th style="min-width: 100px;">Площадь (м²)</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsBody">
+                        <!-- Первая строка -->
+                        <tr class="item-row">
+                            <td>
+                                <select class="form-select productname-select" name="product_name[]" required>
+                                    <option value="">Выберите наименование...</option>
+                                    {% for pn in product_names %}
+                                    <option value="{{ pn.id }}" data-product-type-id="{{ pn.product_type.id }}" data-product-type-name="{{ pn.product_type.name }}">
+                                        {{ pn.name }} ({{ pn.product_type.name }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-select species-select" name="species[]" required>
+                                    <option value="">Выберите породу...</option>
+                                    {% for s in species_list %}
+                                    <option value="{{ s.id }}">{{ s.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-select grade-select" name="grade[]" required>
+                                    <option value="">Выберите категорию...</option>
+                                    {% for g in grades_list %}
+                                    <option value="{{ g.id }}">{{ g.code }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-select dimension-select" name="dimension_id[]">
+                                    <option value="">Сначала выберите наименование</option>
+                                </select>
+                                <input type="hidden" class="dimension-type" name="dimension_type[]" value="">
+                                <input type="hidden" class="dimension-value" name="dimension_value[]" value="">
+                            </td>
+                            <td>
+                                <input type="number" class="form-control quantity-input" name="quantity[]" placeholder="Кол-во" step="1" min="1">
+                            </td>
+                            <td>
+                                <span class="volume-display">—</span>
+                                <input type="hidden" class="volume-hidden" name="volume[]" value="0">
+                            </td>
+                            <td>
+                                <span class="area-display">—</span>
+                                <input type="hidden" class="area-hidden" name="area[]" value="0">
+                            </td>
+                            <td class="text-center"><i class="bi bi-trash text-danger remove-row" style="cursor: pointer;"></i></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-white text-end">
+            <button type="submit" class="btn btn-primary">Сохранить документ</button>
+            <a href="{% if doc_type == 1 %}{% url 'lumber_track:document_initial_journal' %}{% elif doc_type == 2 %}{% url 'lumber_track:document_income_journal' %}{% else %}{% url 'lumber_track:document_outcome_journal' %}{% endif %}" class="btn btn-secondary">Отмена</a>
+        </div>
+    </div>
+</form>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Данные о размерах
+    const lumberDimensions = {
+    {% for ld in lumber_dims %}
+    {{ ld.id }}: {
+        volume: parseFloat("{{ ld.volume_m3|stringformat:'f' }}".replace(',', '.')),
+        area: parseFloat("{{ ld.area_m2|stringformat:'f' }}".replace(',', '.')),
+        display: "{{ ld.thickness }}-{{ ld.width }}-{{ ld.length }} мм"
+    },
+    {% endfor %}
+};
+
+    const unitDimensions = {
+        {% for ud in unit_dims %}
+        {{ ud.id }}: {
+            display: "{{ ud.length }}-{{ ud.width }}-{{ ud.height }} мм"
+        },
+        {% endfor %}
+    };
+
+    // Загрузка размеров в select
+function loadDimensions(dimSelect, productTypeName) {
+    dimSelect.empty();
+    dimSelect.append('<option value="">Выберите размер...</option>');
+
+    if (productTypeName === 'Погонаж') {
+        // Сортировка для погонажа
+        const sorted = Object.entries(lumberDimensions).sort((a, b) => {
+            const dimA = a[1].display.split('-').map(Number);
+            const dimB = b[1].display.split('-').map(Number);
+            if (dimA[0] !== dimB[0]) return dimA[0] - dimB[0];
+            if (dimA[1] !== dimB[1]) return dimA[1] - dimB[1];
+            return dimA[2] - dimB[2];
+        });
+        for (const [id, dim] of sorted) {
+            dimSelect.append(`<option value="${id}" data-type="lumber" data-volume="${dim.volume}" data-area="${dim.area}">${dim.display}</option>`);
+        }
+    } else if (productTypeName === 'Штучный') {
+        // Сортировка для штучных - по длине, затем ширине, затем высоте
+        const sorted = Object.entries(unitDimensions).sort((a, b) => {
+            const dimA = a[1].display.split('-').map(Number);
+            const dimB = b[1].display.split('-').map(Number);
+            if (dimA[0] !== dimB[0]) return dimA[0] - dimB[0];
+            if (dimA[1] !== dimB[1]) return dimA[1] - dimB[1];
+            return dimA[2] - dimB[2];
+        });
+        for (const [id, dim] of sorted) {
+            dimSelect.append(`<option value="${id}" data-type="unit">${dim.display}</option>`);
+        }
+    }
+
+    dimSelect.prop('disabled', false);
+}
+    // Расчет строки
+    function calculateRow(row) {
+        const dimSelect = row.find('.dimension-select');
+        const selectedOption = dimSelect.find('option:selected');
+        const dataType = selectedOption.data('type');
+        const dimId = dimSelect.val();
+        const quantity = row.find('.quantity-input').val();
+        const volumeSpan = row.find('.volume-display');
+        const areaSpan = row.find('.area-display');
+        const volumeHidden = row.find('.volume-hidden');
+        const areaHidden = row.find('.area-hidden');
+        const dimTypeHidden = row.find('.dimension-type');
+        const dimValueHidden = row.find('.dimension-value');
+
+        if (dataType === 'lumber' && dimId && lumberDimensions[dimId] && quantity) {
+            const qty = parseFloat(quantity);
+            const volume = lumberDimensions[dimId].volume * qty;
+            const area = lumberDimensions[dimId].area * qty;
+            volumeSpan.text(volume.toFixed(6));
+            areaSpan.text(area.toFixed(3));
+            volumeHidden.val(volume.toFixed(6));
+            areaHidden.val(area.toFixed(3));
+            dimTypeHidden.val('lumber');
+            dimValueHidden.val(dimId);
+        } else if (dataType === 'unit' && dimId && quantity) {
+            volumeSpan.text('—');
+            areaSpan.text('—');
+            volumeHidden.val('0');
+            areaHidden.val('0');
+            dimTypeHidden.val('unit');
+            dimValueHidden.val(dimId);
+        } else {
+            volumeSpan.text('—');
+            areaSpan.text('—');
+            volumeHidden.val('0');
+            areaHidden.val('0');
+            dimTypeHidden.val('');
+            dimValueHidden.val('');
+        }
+    }
+
+    // Инициализация строки
+    function initRow(row) {
+        const productSelect = row.find('.productname-select');
+        const dimSelect = row.find('.dimension-select');
+
+        // Обработчик изменения наименования
+        productSelect.off('change').on('change', function() {
+            const selectedOption = $(this).find('option:selected');
+            const productTypeName = selectedOption.data('product-type-name');
+
+            if (productTypeName) {
+                loadDimensions(dimSelect, productTypeName);
+            } else {
+                dimSelect.empty();
+                dimSelect.append('<option value="">Сначала выберите наименование</option>');
+                dimSelect.prop('disabled', true);
+            }
+            calculateRow(row);
+        });
+
+        // Обработчик изменения размера
+        dimSelect.off('change').on('change', function() {
+            calculateRow(row);
+        });
+
+        // Обработчик ввода количества
+        row.find('.quantity-input').off('input').on('input', function() {
+            calculateRow(row);
+        });
+
+        // Если уже есть выбранное наименование - загружаем размеры
+        if (productSelect.val()) {
+            const selectedOption = productSelect.find('option:selected');
+            const productTypeName = selectedOption.data('product-type-name');
+            if (productTypeName) {
+                loadDimensions(dimSelect, productTypeName);
+            }
+        }
+    }
+
+    // Добавление новой строки
+    function addNewRow() {
+        const newRow = $('#itemsBody .item-row:first').clone();
+        newRow.find('select').val('');
+        newRow.find('.quantity-input').val('');
+        newRow.find('.volume-display, .area-display').text('—');
+        newRow.find('.volume-hidden, .area-hidden').val('0');
+        newRow.find('.dimension-type, .dimension-value').val('');
+
+        // Очищаем select размеров
+        const dimSelect = newRow.find('.dimension-select');
+        dimSelect.empty();
+        dimSelect.append('<option value="">Сначала выберите наименование</option>');
+
+        $('#itemsBody').append(newRow);
+        initRow(newRow);
+    }
+
+    // Инициализация всех существующих строк
+    $('#itemsBody .item-row').each(function() {
+        initRow($(this));
+    });
+
+    // Кнопка добавления строки
+    $('#addRowBtn').click(function() {
+        addNewRow();
+    });
+
+    // Удаление строки (разрешено удалять любые строки)
+$(document).on('click', '.remove-row', function() {
+    $(this).closest('tr').remove();
+});
+
+    // Валидация
+    $('#documentForm').on('submit', function(e) {
+        let valid = true;
+
+        $('#itemsBody .item-row').each(function() {
+            const product = $(this).find('.productname-select').val();
+            const species = $(this).find('.species-select').val();
+            const grade = $(this).find('.grade-select').val();
+            const dimension = $(this).find('.dimension-select').val();
+            const quantity = $(this).find('.quantity-input').val();
+
+            if (!product || !species || !grade || !dimension || !quantity) {
+                valid = false;
+                $(this).css('background-color', '#ffe6e6');
+            } else {
+                $(this).css('background-color', '');
+            }
+        });
+
+        if (!valid) {
+            alert('Заполните все обязательные поля в строках');
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}
