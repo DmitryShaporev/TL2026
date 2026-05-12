@@ -1,0 +1,91 @@
+<!-- lumber_track/templates/lumber_track/report_result.html -->
+{% extends 'lumber_track/base.html' %}
+
+{% block title %}{{ title }} - результаты{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="h2 mb-3">
+                    <i class="bi bi-graph-up"></i> {{ title }}
+                </h1>
+                <p class="text-muted">
+                    Период: {{ date_from|date:"d.m.Y" }} - {{ date_to|date:"d.m.Y" }}
+                </p>
+            </div>
+            <div>
+                <a href="{% url url_name %}?date_from={{ date_from|date:'Y-m-d' }}&date_to={{ date_to|date:'Y-m-d' }}&export=excel"
+                   class="btn btn-success">
+                    <i class="bi bi-file-excel"></i> Экспорт в Excel
+                </a>
+            </div>
+        </div>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Наименование</th>
+                                <th>Порода</th>
+                                <th>Категория</th>
+                                <th>Размер</th>
+                                <th class="text-end">Количество (шт)</th>
+                                <th class="text-end">Объем (м³)</th>
+                                <th class="text-end">Площадь (м²)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in report_data %}
+                            <tr>
+                                <td>{{ item.product_name }}</strong></td>
+                                <td>{{ item.species }}</td>
+                                <td>{{ item.grade }}</td>
+                                <td>{{ item.dimension_display }}</td>
+                                <td class="text-end">{{ item.total_quantity }}</td>
+                                <td class="text-end">{{ item.total_volume|floatformat:3 }}</td>
+                                <td class="text-end">{{ item.total_area|floatformat:3 }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                    Нет данных за выбранный период
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="4" class="text-end">Итого:</th>
+                                <th class="text-end">{{ total_quantity|floatformat:0 }}</th>
+                                <th class="text-end">{{ total_volume|floatformat:3 }}</th>
+                                <th class="text-end">{{ total_area|floatformat:3 }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <a href="{% url 'lumber_track:reports_page' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Назад к отчетам
+        </a>
+        <a href="{% url url_name %}" class="btn btn-outline-primary">
+            <i class="bi bi-calendar-range"></i> Новый период
+        </a>
+    </div>
+</div>
+{% endblock %}

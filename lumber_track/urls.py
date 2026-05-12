@@ -109,4 +109,28 @@ path('directories/storagelocation/<int:pk>/data/', views.storagelocation_data, n
 
 # Редактирование документа
 path('documents/<int:pk>/edit/', views.document_edit, name='document_edit'),
+
+# Страница отчетов
+path('reports/', views.reports_page, name='reports_page'),
+
+# Отчет: Поступление
+path('reports/income/', views.report_income, name='report_income'),
+path('reports/income/result/', views.report_income_result, name='report_income_result'),
+
+# Отчет: На склад
+path('reports/to-stock/', views.report_to_stock, name='report_to_stock'),
+path('reports/to-stock/result/', views.report_to_stock_result, name='report_to_stock_result'),
+
+# Отчет: В магазин
+path('reports/to-shop/', views.report_to_shop, name='report_to_shop'),
+path('reports/to-shop/result/', views.report_to_shop_result, name='report_to_shop_result'),
+
+# Отчет: Движение продукции
+path('reports/movement/', views.report_movement, name='report_movement'),
+path('reports/movement/result/', views.report_movement_result, name='report_movement_result'),
+
+# Отчет: Сводный по категориям
+path('reports/category/', views.report_category, name='report_category'),
+path('reports/category/result/', views.report_category_result, name='report_category_result'),
+
 ]

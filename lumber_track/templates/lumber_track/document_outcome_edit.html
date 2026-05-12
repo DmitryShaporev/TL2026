@@ -30,13 +30,13 @@
                 <div class="col-md-4 mb-3">
                     <label for="to_location" class="form-label">Куда перемещается *</label>
                     <select class="form-select" id="to_location" name="to_location" required>
-                        <option value="">Выберите место...</option>
-                        {% for loc in locations %}
-                        {% if loc.id != 2 %}
-                        <option value="{{ loc.id }}" {% if to_location_name == loc.name %}selected{% endif %}>{{ loc.name }}</option>
-                        {% endif %}
-                        {% endfor %}
-                    </select>
+    <option value="">Выберите место...</option>
+    {% for loc in locations %}
+    {% if loc.id != 2 %}
+    <option value="{{ loc.id }}" {% if to_location_id == loc.id %}selected{% endif %}>{{ loc.name }}</option>
+    {% endif %}
+    {% endfor %}
+</select>
                 </div>
             </div>
             <div class="row">

@@ -44,7 +44,7 @@
 <body>
     <!-- Навигация -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
+        <div class="container ">
             <a class="navbar-brand text-white" href="{% url 'lumber_track:home' %}">
                  <i class="bi bi-tree text-success" ></i> TimberLogic
             </a>
@@ -64,7 +64,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#">
+                        <a class="nav-link" href="{% url 'lumber_track:reports_page' %}">
                             <i class="bi bi-bar-chart "></i> Отчеты
                         </a>
                     </li>

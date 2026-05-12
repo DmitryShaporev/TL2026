@@ -1,0 +1,103 @@
+<!-- lumber_track/templates/lumber_track/report_movement.html -->
+{% extends 'lumber_track/base.html' %}
+
+{% block title %}{{ title }} - результаты{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="h2 mb-3">
+                    <i class="bi bi-graph-up-arrow"></i> {{ title }}
+                </h1>
+                <p class="text-muted">
+                    Период: {{ date_from|date:"d.m.Y" }} - {{ date_to|date:"d.m.Y" }}
+                </p>
+            </div>
+            <div>
+                <a href="{% url url_name %}?date_from={{ date_from|date:'Y-m-d' }}&date_to={{ date_to|date:'Y-m-d' }}&export=excel"
+                   class="btn btn-success">
+                    <i class="bi bi-file-excel"></i> Экспорт в Excel
+                </a>
+            </div>
+        </div>
+        <hr>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Наименование</th>
+                                <th>Размер</th>
+                                <th>Порода</th>
+                                <th>Сорт</th>
+                                <th class="text-end">Остаток на начало</th>
+                                <th class="text-end">Приход</th>
+                                <th class="text-end">Расход</th>
+                                <th class="text-end">Остаток на конец</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for group in grouped_data %}
+                                {% for item in group.items %}
+                                <tr>
+                                    <td>{{ item.product_name }}</td>
+                                    <td>{{ item.dimension_display }}</td>
+                                    <td>{{ item.species }}</td>
+                                    <td>{{ item.grade }}</td>
+                                    <td class="text-end">{{ item.initial_quantity }}</td>
+                                    <td class="text-end">{{ item.income_quantity }}</td>
+                                    <td class="text-end">{{ item.expense_quantity }}</td>
+                                    <td class="text-end"><strong>{{ item.ending_quantity }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                                <tr class="table-secondary">
+                                    <td colspan="4" class="fw-bold">Итого: {{ group.product_name }}</td>
+                                    <td class="text-end fw-bold">{{ group.total_initial }}</td>
+                                    <td class="text-end fw-bold">{{ group.total_income }}</td>
+                                    <td class="text-end fw-bold">{{ group.total_expense }}</td>
+                                    <td class="text-end fw-bold">{{ group.total_ending }}</td>
+                                </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                    Нет данных за выбранный период
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-primary">
+                            <tr>
+                                <th colspan="4" class="text-end">ВСЕГО:</th>
+                                <th class="text-end">{{ grand_total_initial }}</th>
+                                <th class="text-end">{{ grand_total_income }}</th>
+                                <th class="text-end">{{ grand_total_expense }}</th>
+                                <th class="text-end">{{ grand_total_ending }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <a href="{% url 'lumber_track:reports_page' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Назад к отчетам
+        </a>
+        <a href="{% url url_name %}" class="btn btn-outline-primary">
+            <i class="bi bi-calendar-range"></i> Новый период
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1,33 +1,26 @@
 # lumber_track/views.py
 import json
-import json
+import re
+from datetime import datetime
 from django.db import models
-from django.db.models import Q
-from django.http import JsonResponse
+from django.db.models import Q, Sum
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from .models import (
-    ProductType, WoodSpecies, QualityGrade, ProductName,
-    UnitDimension, LumberDimension, ProductItem
-)
-from django.db import IntegrityError
-from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.views.decorators.csrf import csrf_exempt
+from django.db import connection, IntegrityError
 
-from .models import ProductType, WoodSpecies, QualityGrade, ProductName, UnitDimension, LumberDimension, ProductItem
+from .models import (
+    ProductType, WoodSpecies, QualityGrade, ProductName,
+    UnitDimension, LumberDimension, ProductItem, Document, DocumentItem, StorageLocation
+)
 
-# lumber_track/views.py - добавьте в начало файла
 
-from django.db import connection
-
-
-# lumber_track/views.py
+# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 def get_available_stocks_with_details(location_id=None, exclude_document_id=None):
     """Возвращает позиции с остатками и деталями для селекта расхода"""
-
     query = """
         WITH stock_calc AS (
             SELECT 
@@ -58,14 +51,10 @@ def get_available_stocks_with_details(location_id=None, exclude_document_id=None
             LEFT JOIN lumber_track_unitdimension ud ON di.unit_dim_id = ud.id
             WHERE d.doc_date <= date('now')
     """
-
     if location_id:
         query += f" AND d.location_id = {location_id}"
-
-    # Исключаем текущий документ из расчёта
     if exclude_document_id:
         query += f" AND d.id != {exclude_document_id}"
-
     query += """
             GROUP BY 
                 di.product_name_id, pn.name,
@@ -106,16 +95,58 @@ def get_available_stocks_with_details(location_id=None, exclude_document_id=None
         FROM stock_calc
         ORDER BY product_name, species, grade, dimension_display
     """
-
     with connection.cursor() as cursor:
         cursor.execute(query)
         columns = [col[0] for col in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-
     return results
+
+
+def export_to_excel(data, title, date_from, date_to):
+    """Экспорт отчета в Excel"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = title[:31]  # Excel ограничение на длину имени листа
+
+    headers = ['Наименование', 'Порода', 'Категория', 'Размер', 'Количество (шт)', 'Объем (м³)', 'Площадь (м²)']
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal='center')
+        cell.fill = PatternFill(start_color='E0E0E0', end_color='E0E0E0', fill_type='solid')
+
+    for row, item in enumerate(data, 2):
+        ws.cell(row=row, column=1, value=item['product_name'])
+        ws.cell(row=row, column=2, value=item['species'])
+        ws.cell(row=row, column=3, value=item['grade'])
+        ws.cell(row=row, column=4, value=item['dimension_display'])
+        ws.cell(row=row, column=5, value=float(item['total_quantity']))
+        ws.cell(row=row, column=6, value=float(item['total_volume']))
+        ws.cell(row=row, column=7, value=float(item['total_area']))
+
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 20
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 15
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
+    wb.save(response)
+    return response
+
+
 # ========== ГЛАВНАЯ И СПРАВОЧНИКИ ==========
 def home_view(request):
     return render(request, 'lumber_track/home.html')
+
 
 def directories_view(request):
     return render(request, 'lumber_track/directories.html')
@@ -132,13 +163,14 @@ def producttype_list(request):
     }
     return render(request, 'lumber_track/directory_table.html', context)
 
+
 def producttype_create(request):
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         if name:
             ProductType.objects.create(name=name)
-
     return redirect('lumber_track:producttype_list')
+
 
 def producttype_edit(request, pk):
     item = get_object_or_404(ProductType, pk=pk)
@@ -147,15 +179,18 @@ def producttype_edit(request, pk):
         if name:
             item.name = name
             item.save()
-
     return redirect('lumber_track:producttype_list')
+
 
 def producttype_delete(request, pk):
     item = get_object_or_404(ProductType, pk=pk)
-
     item.delete()
-
     return redirect('lumber_track:producttype_list')
+
+
+def producttype_data(request, pk):
+    item = get_object_or_404(ProductType, pk=pk)
+    return JsonResponse({'name': item.name})
 
 
 # ========== ПОРОДЫ ДРЕВЕСИНЫ ==========
@@ -169,13 +204,14 @@ def woodspecies_list(request):
     }
     return render(request, 'lumber_track/directory_table.html', context)
 
+
 def woodspecies_create(request):
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         if name:
             WoodSpecies.objects.create(name=name)
-
     return redirect('lumber_track:woodspecies_list')
+
 
 def woodspecies_edit(request, pk):
     item = get_object_or_404(WoodSpecies, pk=pk)
@@ -184,15 +220,18 @@ def woodspecies_edit(request, pk):
         if name:
             item.name = name
             item.save()
-
     return redirect('lumber_track:woodspecies_list')
+
 
 def woodspecies_delete(request, pk):
     item = get_object_or_404(WoodSpecies, pk=pk)
-
     item.delete()
-
     return redirect('lumber_track:woodspecies_list')
+
+
+def woodspecies_data(request, pk):
+    item = get_object_or_404(WoodSpecies, pk=pk)
+    return JsonResponse({'name': item.name})
 
 
 # ========== КАТЕГОРИИ КАЧЕСТВА ==========
@@ -206,13 +245,14 @@ def qualitygrade_list(request):
     }
     return render(request, 'lumber_track/directory_table.html', context)
 
+
 def qualitygrade_create(request):
     if request.method == 'POST':
-        code = request.POST.get('name', '').strip().upper()  # Категории хранятся в поле code
+        code = request.POST.get('name', '').strip().upper()
         if code:
             QualityGrade.objects.create(code=code)
-
     return redirect('lumber_track:qualitygrade_list')
+
 
 def qualitygrade_edit(request, pk):
     item = get_object_or_404(QualityGrade, pk=pk)
@@ -221,29 +261,18 @@ def qualitygrade_edit(request, pk):
         if code:
             item.code = code
             item.save()
-
     return redirect('lumber_track:qualitygrade_list')
+
 
 def qualitygrade_delete(request, pk):
     item = get_object_or_404(QualityGrade, pk=pk)
-
     item.delete()
-
     return redirect('lumber_track:qualitygrade_list')
 
 
-# ========== API для получения данных (редактирование) ==========
-def producttype_data(request, pk):
-    item = get_object_or_404(ProductType, pk=pk)
-    return JsonResponse({'name': item.name})
-
-def woodspecies_data(request, pk):
-    item = get_object_or_404(WoodSpecies, pk=pk)
-    return JsonResponse({'name': item.name})
-
 def qualitygrade_data(request, pk):
     item = get_object_or_404(QualityGrade, pk=pk)
-    return JsonResponse({'name': item.code})  # у QualityGrade поле code
+    return JsonResponse({'name': item.code})
 
 
 # ========== НАИМЕНОВАНИЯ ИЗДЕЛИЙ ==========
@@ -259,6 +288,7 @@ def productname_list(request):
     }
     return render(request, 'lumber_track/directory_productname.html', context)
 
+
 def productname_create(request):
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -267,6 +297,7 @@ def productname_create(request):
             product_type = get_object_or_404(ProductType, pk=product_type_id)
             ProductName.objects.create(name=name, product_type=product_type)
     return redirect('lumber_track:productname_list')
+
 
 def productname_edit(request, pk):
     item = get_object_or_404(ProductName, pk=pk)
@@ -279,10 +310,12 @@ def productname_edit(request, pk):
             item.save()
     return redirect('lumber_track:productname_list')
 
+
 def productname_delete(request, pk):
     item = get_object_or_404(ProductName, pk=pk)
     item.delete()
     return redirect('lumber_track:productname_list')
+
 
 def productname_data(request, pk):
     item = get_object_or_404(ProductName, pk=pk)
@@ -309,7 +342,6 @@ def unitdimension_create(request):
         length = request.POST.get('length', '').strip()
         width = request.POST.get('width', '').strip()
         height = request.POST.get('height', '').strip()
-
         if length and width and height:
             try:
                 UnitDimension.objects.create(
@@ -318,7 +350,7 @@ def unitdimension_create(request):
                     height=int(height)
                 )
             except (ValueError, IntegrityError):
-                pass  # игнорируем ошибки (например, дубликаты)
+                pass
     return redirect('lumber_track:unitdimension_list')
 
 
@@ -328,7 +360,6 @@ def unitdimension_edit(request, pk):
         length = request.POST.get('length', '').strip()
         width = request.POST.get('width', '').strip()
         height = request.POST.get('height', '').strip()
-
         if length and width and height:
             try:
                 item.length = int(length)
@@ -373,7 +404,6 @@ def lumberdimension_create(request):
         thickness = request.POST.get('thickness', '').strip()
         width = request.POST.get('width', '').strip()
         length = request.POST.get('length', '').strip()
-
         if thickness and width and length:
             try:
                 LumberDimension.objects.create(
@@ -382,7 +412,7 @@ def lumberdimension_create(request):
                     length=int(length)
                 )
             except (ValueError, IntegrityError):
-                pass  # игнорируем ошибки (например, дубликаты)
+                pass
     return redirect('lumber_track:lumberdimension_list')
 
 
@@ -392,7 +422,6 @@ def lumberdimension_edit(request, pk):
         thickness = request.POST.get('thickness', '').strip()
         width = request.POST.get('width', '').strip()
         length = request.POST.get('length', '').strip()
-
         if thickness and width and length:
             try:
                 item.thickness = int(thickness)
@@ -422,12 +451,11 @@ def lumberdimension_data(request, pk):
     })
 
 
-# ========== СПРАВОЧНИК ИЗДЕЛИЙ (основной) ==========
+# ========== СПРАВОЧНИК ИЗДЕЛИЙ ==========
 def productitem_list(request):
     items = ProductItem.objects.all().select_related(
         'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'
     ).order_by('-created_at')
-
     context = {
         'title': 'Справочник изделий',
         'items': items,
@@ -448,7 +476,6 @@ def productitem_create(request):
         grade_id = request.POST.get('grade')
         lumber_dim_id = request.POST.get('lumber_dim')
         unit_dim_id = request.POST.get('unit_dim')
-
         if product_name_id and species_id and grade_id:
             ProductItem.objects.create(
                 product_name_id=product_name_id,
@@ -467,202 +494,58 @@ def productitem_delete(request, pk):
     return redirect('lumber_track:productitem_list')
 
 
-# ========== API для Select2 (быстрое добавление) ==========
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def api_add_productname(request):
-    """Быстрое добавление наименования изделия"""
-    try:
-        data = json.loads(request.body)
-        name = data.get('name', '').strip()
-        product_type_id = data.get('product_type_id')
-
-        if not name:
-            return JsonResponse({'error': 'Название не может быть пустым'}, status=400)
-
-        # Определяем тип продукции по умолчанию (если не выбран)
-        if not product_type_id:
-            # Пробуем найти тип "Погонаж" или создаем
-            product_type, _ = ProductType.objects.get_or_create(name="Погонаж")
-            product_type_id = product_type.id
-
-        obj, created = ProductName.objects.get_or_create(
-            name=name,
-            defaults={'product_type_id': product_type_id}
-        )
-
-        return JsonResponse({
-            'id': obj.id,
-            'text': f"{obj.name} ({obj.product_type.name})",
-            'created': created
-        })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+# ========== МЕСТА ХРАНЕНИЯ ==========
+def storagelocation_list(request):
+    items = StorageLocation.objects.all().order_by('name')
+    context = {
+        'title': 'Места хранения',
+        'items': items,
+        'create_url': '/directories/storagelocation/create/',
+        'delete_url': 'lumber_track:storagelocation_delete',
+    }
+    return render(request, 'lumber_track/directory_table.html', context)
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def api_add_woodspecies(request):
-    """Быстрое добавление породы древесины"""
-    try:
-        data = json.loads(request.body)
-        name = data.get('name', '').strip()
-
-        if not name:
-            return JsonResponse({'error': 'Название не может быть пустым'}, status=400)
-
-        obj, created = WoodSpecies.objects.get_or_create(name=name)
-        return JsonResponse({'id': obj.id, 'text': obj.name, 'created': created})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+def storagelocation_create(request):
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        if name:
+            StorageLocation.objects.create(name=name)
+    return redirect('lumber_track:storagelocation_list')
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def api_add_qualitygrade(request):
-    """Быстрое добавление категории качества"""
-    try:
-        data = json.loads(request.body)
-        code = data.get('name', '').strip().upper()
-
-        if not code:
-            return JsonResponse({'error': 'Код не может быть пустым'}, status=400)
-
-        obj, created = QualityGrade.objects.get_or_create(code=code)
-        return JsonResponse({'id': obj.id, 'text': obj.code, 'created': created})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+def storagelocation_edit(request, pk):
+    item = get_object_or_404(StorageLocation, pk=pk)
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        if name:
+            item.name = name
+            item.save()
+    return redirect('lumber_track:storagelocation_list')
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def api_add_lumberdimension(request):
-    """Быстрое добавление размера погонажа"""
-    try:
-        data = json.loads(request.body)
-        thickness = int(data.get('thickness', 0))
-        width = int(data.get('width', 0))
-        length = int(data.get('length', 0))
-
-        if not all([thickness, width, length]):
-            return JsonResponse({'error': 'Все размеры должны быть указаны'}, status=400)
-
-        obj, created = LumberDimension.objects.get_or_create(
-            thickness=thickness,
-            width=width,
-            length=length
-        )
-
-        return JsonResponse({
-            'id': obj.id,
-            'text': f"{thickness}-{width}-{length} мм ({obj.volume_m3:.6f} м³)",
-            'created': created
-        })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+def storagelocation_delete(request, pk):
+    item = get_object_or_404(StorageLocation, pk=pk)
+    item.delete()
+    return redirect('lumber_track:storagelocation_list')
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def api_add_unitdimension(request):
-    """Быстрое добавление размера штучного изделия"""
-    try:
-        data = json.loads(request.body)
-        length = int(data.get('length', 0))
-        width = int(data.get('width', 0))
-        height = int(data.get('height', 0))
-
-        if not all([length, width, height]):
-            return JsonResponse({'error': 'Все размеры должны быть указаны'}, status=400)
-
-        obj, created = UnitDimension.objects.get_or_create(
-            length=length,
-            width=width,
-            height=height
-        )
-
-        return JsonResponse({
-            'id': obj.id,
-            'text': f"{length}-{width}-{height} мм",
-            'created': created
-        })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+def storagelocation_data(request, pk):
+    item = get_object_or_404(StorageLocation, pk=pk)
+    return JsonResponse({'name': item.name})
 
 
-# ========== API для поиска (Select2) ==========
-
-def api_search_productname(request):
-    """Поиск наименований для Select2"""
-    term = request.GET.get('term', '')
-    items = ProductName.objects.filter(name__icontains=term).select_related('product_type')[:20]
-    results = [{'id': item.id, 'text': f"{item.name} ({item.product_type.name})"} for item in items]
-    return JsonResponse({'results': results})
-
-
-def api_search_woodspecies(request):
-    """Поиск пород для Select2"""
-    term = request.GET.get('term', '')
-    items = WoodSpecies.objects.filter(name__icontains=term)[:20]
-    results = [{'id': item.id, 'text': item.name} for item in items]
-    return JsonResponse({'results': results})
-
-
-def api_search_qualitygrade(request):
-    """Поиск категорий для Select2"""
-    term = request.GET.get('term', '')
-    items = QualityGrade.objects.filter(code__icontains=term)[:20]
-    results = [{'id': item.id, 'text': item.code} for item in items]
-    return JsonResponse({'results': results})
-
-
-def api_search_lumberdim(request):
-    """Поиск размеров погонажа для Select2"""
-    term = request.GET.get('term', '')
-    items = LumberDimension.objects.filter(
-        models.Q(thickness__icontains=term) |
-        models.Q(width__icontains=term) |
-        models.Q(length__icontains=term)
-    )[:20]
-    results = [{'id': item.id, 'text': f"{item.thickness}-{item.width}-{item.length} мм ({item.volume_m3:.6f} м³)"} for
-               item in items]
-    return JsonResponse({'results': results})
-
-
-def api_search_unitdim(request):
-    """Поиск размеров штучных для Select2"""
-    term = request.GET.get('term', '')
-    items = UnitDimension.objects.filter(
-        models.Q(length__icontains=term) |
-        models.Q(width__icontains=term) |
-        models.Q(height__icontains=term)
-    )[:20]
-    results = [{'id': item.id, 'text': f"{item.length}-{item.width}-{item.height} мм"} for item in items]
-    return JsonResponse({'results': results})
-
-
+# ========== ДОКУМЕНТЫ ==========
 def documents_page(request):
-    """Страница с карточками документов"""
     return render(request, 'lumber_track/documents.html')
 
 
-# lumber_track/views.py - добавьте функции
-
-from .models import Document, DocumentItem
-from django.db.models import Q
-
-
 def document_journal(request, doc_type):
-    """Универсальный журнал документов"""
     doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc_type, 'Документы')
     documents = Document.objects.filter(doc_type=doc_type).prefetch_related('items').order_by('-doc_date',
                                                                                               '-created_at')
-
-    # Для каждой записи добавляем флаг has_items
     for doc in documents:
         doc.has_items = doc.items.exists()
-
     context = {
         'title': doc_type_name,
         'documents': documents,
@@ -673,22 +556,14 @@ def document_journal(request, doc_type):
 
 
 def document_delete(request, pk):
-    """Удаление документа только если нет позиций"""
     doc = get_object_or_404(Document, pk=pk)
-
-    # Сохраняем тип для перенаправления
     doc_type = doc.doc_type
     doc_number = doc.doc_number
-
-    # Проверяем, есть ли позиции
     if doc.items.exists():
-        messages.error(request,
-                       f'❌ Невозможно удалить документ "{doc_number}", так как он содержит позиции. Сначала удалите все позиции.')
+        messages.error(request, f'❌ Невозможно удалить документ "{doc_number}", так как он содержит позиции.')
     else:
         doc.delete()
         messages.success(request, f'✅ Документ "{doc_number}" успешно удален.')
-
-    # Перенаправляем в соответствующий журнал
     if doc_type == 1:
         return redirect('lumber_track:document_initial_journal')
     elif doc_type == 2:
@@ -697,23 +572,11 @@ def document_delete(request, pk):
         return redirect('lumber_track:document_outcome_journal')
 
 
-# lumber_track/views.py - функция document_create
-
-# lumber_track/views.py
-# lumber_track/views.py
-
-# lumber_track/views.py
-
-# lumber_track/views.py
-
 def document_create(request, doc_type):
-    """Создание документа"""
     doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc_type, 'Документ')
 
     if request.method == 'POST':
         doc_number = request.POST.get('doc_number', '').strip()
-
-        # Проверяем уникальность комбинации тип + номер
         if Document.objects.filter(doc_type=doc_type, doc_number=doc_number).exists():
             messages.error(request, f'Документ с номером "{doc_number}" для данного типа документа уже существует!')
             context = {
@@ -726,25 +589,19 @@ def document_create(request, doc_type):
                 'unit_dims': UnitDimension.objects.all().order_by('length', 'width', 'height'),
                 'locations': StorageLocation.objects.all().order_by('name'),
             }
-            # Для расхода нужен другой шаблон при ошибке
             if doc_type == 3:
                 available_stocks = get_available_stocks_with_details()
                 context['available_stocks'] = available_stocks
                 return render(request, 'lumber_track/document_outcome_form.html', context)
             return render(request, 'lumber_track/document_form.html', context)
 
-        # Определяем location_id ДО создания документа
+        # Определяем location_id
         location_id = request.POST.get('location')
-
-        # Для начальных остатков
         if not location_id and doc_type == 1:
-            location_id = 2  # ID склада готовой продукции
-
-        # Для расхода - автоматически подставляем склад (откуда списываем)
+            location_id = 2
         if not location_id and doc_type == 3:
-            location_id = 2  # ID склада готовой продукции
+            location_id = 2
 
-        # Создаем документ
         doc = Document.objects.create(
             doc_type=doc_type,
             doc_number=doc_number,
@@ -753,8 +610,15 @@ def document_create(request, doc_type):
             location_id=location_id
         )
 
-        # Для расхода - обрабатываем позиции с остатками
-        if doc_type == 3:  # Расход
+        # Сохраняем to_location для расхода
+        if doc_type == 3:
+            to_location_id = request.POST.get('to_location')
+            if to_location_id:
+                doc.to_location_id = to_location_id
+                doc.save()
+
+        # Сохраняем позиции
+        if doc_type == 3:
             stock_items = request.POST.getlist('stock_item[]')
             quantities = request.POST.getlist('quantity[]')
             product_names = request.POST.getlist('product_name[]')
@@ -763,37 +627,23 @@ def document_create(request, doc_type):
             dimension_ids = request.POST.getlist('dimension_id[]')
             dimension_types = request.POST.getlist('dimension_type[]')
 
-            # Сохраняем "куда перемещается" в примечание
-            to_location_id = request.POST.get('to_location')
-            if to_location_id:
-                to_location = StorageLocation.objects.get(id=to_location_id)
-                note_text = request.POST.get('note', '')
-                new_note = f"{note_text}\nПеремещено в: {to_location.name}" if note_text else f"Перемещено в: {to_location.name}"
-                doc.note = new_note
-                doc.save()
-
             for i in range(len(stock_items)):
                 if not stock_items[i]:
                     continue
-
                 quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
                 if quantity == 0:
                     continue
-
                 product_name_id = product_names[i] if i < len(product_names) else None
                 species_id = species_list[i] if i < len(species_list) else None
                 grade_id = grades_list[i] if i < len(grades_list) else None
                 dimension_id = dimension_ids[i] if i < len(dimension_ids) else None
                 dimension_type = dimension_types[i] if i < len(dimension_types) else None
-
                 lumber_dim_id = None
                 unit_dim_id = None
-
                 if dimension_type == 'lumber':
                     lumber_dim_id = dimension_id
                 elif dimension_type == 'unit':
                     unit_dim_id = dimension_id
-
                 DocumentItem.objects.create(
                     document=doc,
                     product_name_id=product_name_id,
@@ -804,7 +654,6 @@ def document_create(request, doc_type):
                     quantity=quantity
                 )
         else:
-            # Для начальных остатков и прихода - обычная обработка
             product_names = request.POST.getlist('product_name[]')
             species_list = request.POST.getlist('species[]')
             grades_list = request.POST.getlist('grade[]')
@@ -815,20 +664,16 @@ def document_create(request, doc_type):
             for i in range(len(product_names)):
                 if not product_names[i] or not species_list[i] or not grades_list[i]:
                     continue
-
                 quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
                 if quantity == 0:
                     continue
-
                 lumber_dim_id = None
                 unit_dim_id = None
-
                 if i < len(dimension_ids) and dimension_ids[i]:
                     if i < len(dimension_types) and dimension_types[i] == 'lumber':
                         lumber_dim_id = dimension_ids[i]
                     elif i < len(dimension_types) and dimension_types[i] == 'unit':
                         unit_dim_id = dimension_ids[i]
-
                 DocumentItem.objects.create(
                     document=doc,
                     product_name_id=product_names[i],
@@ -839,15 +684,11 @@ def document_create(request, doc_type):
                     quantity=quantity
                 )
 
-        # Перенаправляем в журнал
-        redirect_urls = {
-            1: 'lumber_track:document_initial_journal',
-            2: 'lumber_track:document_income_journal',
-            3: 'lumber_track:document_outcome_journal',
-        }
+        redirect_urls = {1: 'lumber_track:document_initial_journal', 2: 'lumber_track:document_income_journal',
+                         3: 'lumber_track:document_outcome_journal'}
         return redirect(redirect_urls.get(doc_type, 'lumber_track:document_initial_journal'))
 
-    # ========== GET ЗАПРОС ==========
+    # GET запрос
     context = {
         'doc_type': doc_type,
         'doc_type_name': doc_type_name,
@@ -858,17 +699,245 @@ def document_create(request, doc_type):
         'unit_dims': UnitDimension.objects.all().order_by('length', 'width', 'height'),
         'locations': StorageLocation.objects.all().order_by('name'),
     }
-
-    # Выбираем шаблон в зависимости от типа документа
-    if doc_type == 3:  # Расход
+    if doc_type == 3:
         available_stocks = get_available_stocks_with_details()
         context['available_stocks'] = available_stocks
         return render(request, 'lumber_track/document_outcome_form.html', context)
     else:
         return render(request, 'lumber_track/document_form.html', context)
-# API для получения данных о размере (для расчета объема и площади)
+
+
+def document_edit(request, pk):
+    doc = get_object_or_404(Document, pk=pk)
+    doc_type = doc.doc_type
+    doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc_type, 'Документ')
+
+    original_note = doc.note
+    to_location_name = None
+    to_location_id = doc.to_location_id
+
+    # Для старых документов, где to_location было в примечании
+    if doc_type == 3 and not doc.to_location_id and doc.note:
+        match = re.search(r'Перемещено в: (.+)', doc.note)
+        if match:
+            to_location_name = match.group(1).strip()
+            original_note = re.sub(r'\n?Перемещено в: .+', '', doc.note).strip()
+
+    if request.method == 'POST':
+        doc.doc_number = request.POST.get('doc_number')
+        doc.doc_date = request.POST.get('doc_date')
+
+        if doc_type == 3:
+            to_location_id = request.POST.get('to_location')
+            if to_location_id:
+                doc.to_location_id = to_location_id
+            doc.note = request.POST.get('note', '')
+        else:
+            doc.note = request.POST.get('note', '')
+        doc.save()
+
+        doc.items.all().delete()
+
+        if doc_type == 3:
+            stock_items = request.POST.getlist('stock_item[]')
+            quantities = request.POST.getlist('quantity[]')
+            product_names = request.POST.getlist('product_name[]')
+            species_list = request.POST.getlist('species[]')
+            grades_list = request.POST.getlist('grade[]')
+            dimension_ids = request.POST.getlist('dimension_id[]')
+            dimension_types = request.POST.getlist('dimension_type[]')
+
+            for i in range(len(stock_items)):
+                if not stock_items[i]:
+                    continue
+                quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
+                if quantity == 0:
+                    continue
+                product_name_id = product_names[i] if i < len(product_names) else None
+                species_id = species_list[i] if i < len(species_list) else None
+                grade_id = grades_list[i] if i < len(grades_list) else None
+                dimension_id = dimension_ids[i] if i < len(dimension_ids) else None
+                dimension_type = dimension_types[i] if i < len(dimension_types) else None
+                lumber_dim_id = None
+                unit_dim_id = None
+                if dimension_type == 'lumber':
+                    lumber_dim_id = dimension_id
+                elif dimension_type == 'unit':
+                    unit_dim_id = dimension_id
+                DocumentItem.objects.create(
+                    document=doc,
+                    product_name_id=product_name_id,
+                    species_id=species_id,
+                    grade_id=grade_id,
+                    lumber_dim_id=lumber_dim_id,
+                    unit_dim_id=unit_dim_id,
+                    quantity=quantity
+                )
+        else:
+            product_names = request.POST.getlist('product_name[]')
+            species_list = request.POST.getlist('species[]')
+            grades_list = request.POST.getlist('grade[]')
+            dimension_ids = request.POST.getlist('dimension_id[]')
+            dimension_types = request.POST.getlist('dimension_type[]')
+            quantities = request.POST.getlist('quantity[]')
+
+            for i in range(len(product_names)):
+                if not product_names[i] or not species_list[i] or not grades_list[i]:
+                    continue
+                quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
+                if quantity == 0:
+                    continue
+                lumber_dim_id = None
+                unit_dim_id = None
+                if i < len(dimension_ids) and dimension_ids[i]:
+                    if i < len(dimension_types) and dimension_types[i] == 'lumber':
+                        lumber_dim_id = dimension_ids[i]
+                    elif i < len(dimension_types) and dimension_types[i] == 'unit':
+                        unit_dim_id = dimension_ids[i]
+                DocumentItem.objects.create(
+                    document=doc,
+                    product_name_id=product_names[i],
+                    species_id=species_list[i],
+                    grade_id=grades_list[i],
+                    lumber_dim_id=lumber_dim_id,
+                    unit_dim_id=unit_dim_id,
+                    quantity=quantity
+                )
+
+        redirect_urls = {1: 'lumber_track:document_initial_journal', 2: 'lumber_track:document_income_journal',
+                         3: 'lumber_track:document_outcome_journal'}
+        return redirect(redirect_urls.get(doc_type, 'lumber_track:document_initial_journal'))
+
+    context = {
+        'doc': doc,
+        'doc_type': doc_type,
+        'doc_type_name': doc_type_name,
+        'original_note': original_note,
+        'to_location_id': to_location_id,
+        'to_location_name': to_location_name,
+        'product_names': ProductName.objects.all().select_related('product_type'),
+        'species_list': WoodSpecies.objects.all().order_by('name'),
+        'grades_list': QualityGrade.objects.all().order_by('code'),
+        'lumber_dims': LumberDimension.objects.all().order_by('thickness', 'width', 'length'),
+        'unit_dims': UnitDimension.objects.all().order_by('length', 'width', 'height'),
+        'locations': StorageLocation.objects.all().order_by('name'),
+        'items': doc.items.all().select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'),
+    }
+    if doc_type == 3:
+        available_stocks = get_available_stocks_with_details(location_id=2, exclude_document_id=doc.id)
+        context['available_stocks'] = available_stocks
+        return render(request, 'lumber_track/document_outcome_edit.html', context)
+    else:
+        return render(request, 'lumber_track/document_edit.html', context)
+
+
+# ========== API ==========
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_add_productname(request):
+    try:
+        data = json.loads(request.body)
+        name = data.get('name', '').strip()
+        product_type_id = data.get('product_type_id')
+        if not name:
+            return JsonResponse({'error': 'Название не может быть пустым'}, status=400)
+        if not product_type_id:
+            product_type, _ = ProductType.objects.get_or_create(name="Погонаж")
+            product_type_id = product_type.id
+        obj, created = ProductName.objects.get_or_create(
+            name=name,
+            defaults={'product_type_id': product_type_id}
+        )
+        return JsonResponse({
+            'id': obj.id,
+            'text': f"{obj.name} ({obj.product_type.name})",
+            'created': created,
+            'product_type_id': obj.product_type.id,
+            'product_type_name': obj.product_type.name
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_add_woodspecies(request):
+    try:
+        data = json.loads(request.body)
+        name = data.get('name', '').strip()
+        if not name:
+            return JsonResponse({'error': 'Название не может быть пустым'}, status=400)
+        obj, created = WoodSpecies.objects.get_or_create(name=name)
+        return JsonResponse({'id': obj.id, 'text': obj.name, 'created': created})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_add_qualitygrade(request):
+    try:
+        data = json.loads(request.body)
+        code = data.get('name', '').strip().upper()
+        if not code:
+            return JsonResponse({'error': 'Код не может быть пустым'}, status=400)
+        obj, created = QualityGrade.objects.get_or_create(code=code)
+        return JsonResponse({'id': obj.id, 'text': obj.code, 'created': created})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_add_lumberdimension(request):
+    try:
+        data = json.loads(request.body)
+        thickness = int(data.get('thickness', 0))
+        width = int(data.get('width', 0))
+        length = int(data.get('length', 0))
+        if not all([thickness, width, length]):
+            return JsonResponse({'error': 'Все размеры должны быть указаны'}, status=400)
+        obj, created = LumberDimension.objects.get_or_create(
+            thickness=thickness,
+            width=width,
+            length=length
+        )
+        return JsonResponse({
+            'id': obj.id,
+            'text': f"{thickness}-{width}-{length} мм ({obj.volume_m3:.6f} м³)",
+            'created': created,
+            'volume': obj.volume_m3,
+            'area': obj.area_m2
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_add_unitdimension(request):
+    try:
+        data = json.loads(request.body)
+        length = int(data.get('length', 0))
+        width = int(data.get('width', 0))
+        height = int(data.get('height', 0))
+        if not all([length, width, height]):
+            return JsonResponse({'error': 'Все размеры должны быть указаны'}, status=400)
+        obj, created = UnitDimension.objects.get_or_create(
+            length=length,
+            width=width,
+            height=height
+        )
+        return JsonResponse({
+            'id': obj.id,
+            'text': f"{length}-{width}-{height} мм",
+            'created': created
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
 def api_get_lumberdim_data(request, pk):
-    """Получение данных размера погонажа для расчета"""
     dim = get_object_or_404(LumberDimension, pk=pk)
     return JsonResponse({
         'volume': dim.volume_m3,
@@ -876,16 +945,13 @@ def api_get_lumberdim_data(request, pk):
     })
 
 
-# API для быстрого добавления новых справочников
 @csrf_exempt
 def api_add_dimension(request):
-    """Быстрое добавление размера погонажа"""
     if request.method == 'POST':
         data = json.loads(request.body)
         thickness = int(data.get('thickness'))
         width = int(data.get('width'))
         length = int(data.get('length'))
-
         obj, created = LumberDimension.objects.get_or_create(
             thickness=thickness,
             width=width,
@@ -899,218 +965,891 @@ def api_add_dimension(request):
     return JsonResponse({'error': 'Ошибка'}, status=400)
 
 
-@csrf_exempt
-def api_add_productname(request):
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        name = data.get('name', '').strip()
-        # Для простоты берем первый тип продукции
-        product_type = ProductType.objects.first()
-        if name and product_type:
-            obj, created = ProductName.objects.get_or_create(
-                name=name,
-                defaults={'product_type': product_type}
-            )
-            return JsonResponse({'id': obj.id, 'text': obj.name})
-    return JsonResponse({'error': 'Ошибка'}, status=400)
+def api_search_productname(request):
+    term = request.GET.get('term', '')
+    items = ProductName.objects.filter(name__icontains=term).select_related('product_type')[:20]
+    results = [{'id': item.id, 'text': f"{item.name} ({item.product_type.name})"} for item in items]
+    return JsonResponse({'results': results})
+
+
+def api_search_woodspecies(request):
+    term = request.GET.get('term', '')
+    items = WoodSpecies.objects.filter(name__icontains=term)[:20]
+    results = [{'id': item.id, 'text': item.name} for item in items]
+    return JsonResponse({'results': results})
+
+
+def api_search_qualitygrade(request):
+    term = request.GET.get('term', '')
+    items = QualityGrade.objects.filter(code__icontains=term)[:20]
+    results = [{'id': item.id, 'text': item.code} for item in items]
+    return JsonResponse({'results': results})
+
+
+def api_search_lumberdim(request):
+    term = request.GET.get('term', '')
+    items = LumberDimension.objects.filter(
+        models.Q(thickness__icontains=term) |
+        models.Q(width__icontains=term) |
+        models.Q(length__icontains=term)
+    )[:20]
+    results = [{'id': item.id, 'text': f"{item.thickness}-{item.width}-{item.length} мм ({item.volume_m3:.6f} м³)"} for
+               item in items]
+    return JsonResponse({'results': results})
+
+
+def api_search_unitdim(request):
+    term = request.GET.get('term', '')
+    items = UnitDimension.objects.filter(
+        models.Q(length__icontains=term) |
+        models.Q(width__icontains=term) |
+        models.Q(height__icontains=term)
+    )[:20]
+    results = [{'id': item.id, 'text': f"{item.length}-{item.width}-{item.height} мм"} for item in items]
+    return JsonResponse({'results': results})
+
+
+# ========== ОТЧЕТЫ ==========
+def reports_page(request):
+    return render(request, 'lumber_track/reports.html')
+
+
+def report_income(request):
+    if request.GET.get('date_from') and request.GET.get('date_to'):
+        date_from = request.GET.get('date_from')
+        date_to = request.GET.get('date_to')
+        return redirect(f'/reports/income/result/?date_from={date_from}&date_to={date_to}')
+    return render(request, 'lumber_track/report_form.html', {
+        'title': 'Отчет по поступлению',
+        'url_name': 'lumber_track:report_income_result'
+    })
+
+
+def report_income_result(request):
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    if not date_from or not date_to:
+        return redirect('lumber_track:report_income')
+
+    items = DocumentItem.objects.filter(
+        document__doc_type=2,
+        document__doc_date__gte=date_from,
+        document__doc_date__lte=date_to
+    ).select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim')
+
+    report_data = {}
+    for item in items:
+        key = f"{item.product_name_id}_{item.species_id}_{item.grade_id}_{item.lumber_dim_id}_{item.unit_dim_id}"
+        if key not in report_data:
+            report_data[key] = {
+                'product_name': item.product_name.name,
+                'species': item.species.name,
+                'grade': item.grade.code,
+                'dimension_display': item.dimension_display,
+                'total_quantity': 0,
+                'total_volume': 0,
+                'total_area': 0,
+            }
+        report_data[key]['total_quantity'] += item.quantity
+        report_data[key]['total_volume'] += item.volume_m3
+        report_data[key]['total_area'] += item.area_m2
+
+    report_list = sorted(report_data.values(), key=lambda x: x['product_name'])
+    total_quantity = sum(x['total_quantity'] for x in report_list)
+    total_volume = sum(x['total_volume'] for x in report_list)
+    total_area = sum(x['total_area'] for x in report_list)
+
+    context = {
+        'title': 'Отчет по поступлению',
+        'date_from': datetime.strptime(date_from, '%Y-%m-%d'),
+        'date_to': datetime.strptime(date_to, '%Y-%m-%d'),
+        'report_data': report_list,
+        'total_quantity': total_quantity,
+        'total_volume': total_volume,
+        'total_area': total_area,
+        'url_name': 'lumber_track:report_income_result',
+    }
+    if request.GET.get('export') == 'excel':
+        return export_to_excel(report_list, context['title'], date_from, date_to)
+    return render(request, 'lumber_track/report_result.html', context)
+
+
+def report_to_stock(request):
+    if request.GET.get('date_from') and request.GET.get('date_to'):
+        date_from = request.GET.get('date_from')
+        date_to = request.GET.get('date_to')
+        return redirect(f'/reports/to-stock/result/?date_from={date_from}&date_to={date_to}')
+    return render(request, 'lumber_track/report_form.html', {
+        'title': 'Отчет "На склад"',
+        'url_name': 'lumber_track:report_to_stock_result'
+    })
+
+
+def report_to_stock_result(request):
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    if not date_from or not date_to:
+        return redirect('lumber_track:report_to_stock')
+
+    items = DocumentItem.objects.filter(
+        document__doc_date__gte=date_from,
+        document__doc_date__lte=date_to
+    ).filter(
+        (models.Q(document__doc_type=2) & models.Q(document__location_id=2)) |
+        (models.Q(document__doc_type=3) & models.Q(document__to_location_id=2))
+    ).select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim')
+
+    report_data = {}
+    for item in items:
+        key = f"{item.product_name_id}_{item.species_id}_{item.grade_id}_{item.lumber_dim_id}_{item.unit_dim_id}"
+        if key not in report_data:
+            report_data[key] = {
+                'product_name': item.product_name.name,
+                'species': item.species.name,
+                'grade': item.grade.code,
+                'dimension_display': item.dimension_display,
+                'total_quantity': 0,
+                'total_volume': 0,
+                'total_area': 0,
+            }
+        report_data[key]['total_quantity'] += item.quantity
+        report_data[key]['total_volume'] += item.volume_m3
+        report_data[key]['total_area'] += item.area_m2
+
+    report_list = sorted(report_data.values(), key=lambda x: x['product_name'])
+    total_quantity = sum(x['total_quantity'] for x in report_list)
+    total_volume = sum(x['total_volume'] for x in report_list)
+    total_area = sum(x['total_area'] for x in report_list)
+
+    context = {
+        'title': 'Отчет "На склад"',
+        'date_from': datetime.strptime(date_from, '%Y-%m-%d'),
+        'date_to': datetime.strptime(date_to, '%Y-%m-%d'),
+        'report_data': report_list,
+        'total_quantity': total_quantity,
+        'total_volume': total_volume,
+        'total_area': total_area,
+        'url_name': 'lumber_track:report_to_stock_result',
+    }
+    if request.GET.get('export') == 'excel':
+        return export_to_excel(report_list, context['title'], date_from, date_to)
+    return render(request, 'lumber_track/report_result.html', context)
+
+
+def report_to_shop(request):
+    if request.GET.get('date_from') and request.GET.get('date_to'):
+        date_from = request.GET.get('date_from')
+        date_to = request.GET.get('date_to')
+        return redirect(f'/reports/to-shop/result/?date_from={date_from}&date_to={date_to}')
+    return render(request, 'lumber_track/report_form.html', {
+        'title': 'Отчет "В магазин"',
+        'url_name': 'lumber_track:report_to_shop_result'
+    })
+
+
+def report_to_shop_result(request):
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    if not date_from or not date_to:
+        return redirect('lumber_track:report_to_shop')
+
+    items = DocumentItem.objects.filter(
+        document__doc_type=3,
+        document__doc_date__gte=date_from,
+        document__doc_date__lte=date_to
+    ).exclude(
+        document__to_location_id=2
+    ).exclude(
+        document__to_location__isnull=True
+    ).select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim')
+
+    report_data = {}
+    for item in items:
+        key = f"{item.product_name_id}_{item.species_id}_{item.grade_id}_{item.lumber_dim_id}_{item.unit_dim_id}"
+        if key not in report_data:
+            report_data[key] = {
+                'product_name': item.product_name.name,
+                'species': item.species.name,
+                'grade': item.grade.code,
+                'dimension_display': item.dimension_display,
+                'total_quantity': 0,
+                'total_volume': 0,
+                'total_area': 0,
+            }
+        report_data[key]['total_quantity'] += item.quantity
+        report_data[key]['total_volume'] += item.volume_m3
+        report_data[key]['total_area'] += item.area_m2
+
+    report_list = sorted(report_data.values(), key=lambda x: x['product_name'])
+    total_quantity = sum(x['total_quantity'] for x in report_list)
+    total_volume = sum(x['total_volume'] for x in report_list)
+    total_area = sum(x['total_area'] for x in report_list)
+
+    context = {
+        'title': 'Отчет "В магазин"',
+        'date_from': datetime.strptime(date_from, '%Y-%m-%d'),
+        'date_to': datetime.strptime(date_to, '%Y-%m-%d'),
+        'report_data': report_list,
+        'total_quantity': total_quantity,
+        'total_volume': total_volume,
+        'total_area': total_area,
+        'url_name': 'lumber_track:report_to_shop_result',
+    }
+    if request.GET.get('export') == 'excel':
+        return export_to_excel(report_list, context['title'], date_from, date_to)
+    return render(request, 'lumber_track/report_result.html', context)
+
+
+# lumber_track/views.py - добавьте после других функций отчетов
+
+def report_movement(request):
+    """Отчет по движению продукции (остатки, приход, расход)"""
+    if request.GET.get('date_from') and request.GET.get('date_to'):
+        date_from = request.GET.get('date_from')
+        date_to = request.GET.get('date_to')
+        return redirect(f'/reports/movement/result/?date_from={date_from}&date_to={date_to}')
+    return render(request, 'lumber_track/report_form.html', {
+        'title': 'Отчет по движению продукции',
+        'url_name': 'lumber_track:report_movement_result'
+    })
+
+
+# lumber_track/views.py - замените функцию report_movement_result
+
+def report_movement_result(request):
+    """Результат отчета по движению продукции"""
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+
+    if not date_from or not date_to:
+        return redirect('lumber_track:report_movement')
+
+    from django.db.models import Sum, Q
+    from datetime import datetime
+
+    date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+    date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+    # Собираем данные по каждой позиции
+    report_data = {}
+
+    # Получаем все позиции из документов за период и до периода
+    all_items = DocumentItem.objects.select_related(
+        'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'
+    ).filter(
+        document__doc_date__lte=date_to_obj
+    )
+
+    for item in all_items:
+        # Определяем размер
+        if item.lumber_dim:
+            dimension_display = f"{item.lumber_dim.thickness}-{item.lumber_dim.width}-{item.lumber_dim.length} мм"
+            dimension_type = 'lumber'
+            dimension_id = item.lumber_dim.id
+        elif item.unit_dim:
+            dimension_display = f"{item.unit_dim.length}-{item.unit_dim.width}-{item.unit_dim.height} мм"
+            dimension_type = 'unit'
+            dimension_id = item.unit_dim.id
+        else:
+            dimension_display = "—"
+            dimension_type = None
+            dimension_id = None
+
+        key = f"{item.product_name_id}_{item.species_id}_{item.grade_id}_{dimension_id}_{dimension_type}"
+
+        if key not in report_data:
+            report_data[key] = {
+                'product_name': item.product_name.name,
+                'product_name_id': item.product_name_id,
+                'species': item.species.name,
+                'species_id': item.species_id,
+                'grade': item.grade.code,
+                'grade_id': item.grade_id,
+                'dimension_display': dimension_display,
+                'dimension_type': dimension_type,
+                'dimension_id': dimension_id,
+                'initial_quantity': 0,
+                'income_quantity': 0,
+                'expense_quantity': 0,
+            }
+
+    # Считаем данные по каждому ключу
+    for key, data in report_data.items():
+        product_name_id = data['product_name_id']
+        species_id = data['species_id']
+        grade_id = data['grade_id']
+        dimension_id = data['dimension_id']
+        dimension_type = data['dimension_type']
+
+        # Остаток на начало (документы с датой < date_from)
+        # Учитываем: начальные остатки (doc_type=1), приходы на склад (doc_type=2, location_id=2)
+        # и перемещения на склад (doc_type=3, to_location_id=2)
+        initial_filter = Q(document__doc_date__lt=date_from_obj) & (
+                (Q(document__doc_type=1) & Q(document__location_id=2)) |
+                (Q(document__doc_type=2) & Q(document__location_id=2)) |
+                (Q(document__doc_type=3) & Q(document__to_location_id=2))
+        )
+
+        # Приход за период
+        income_filter = Q(document__doc_date__gte=date_from_obj, document__doc_date__lte=date_to_obj) & (
+                (Q(document__doc_type=1) & Q(document__location_id=2)) |
+                (Q(document__doc_type=2) & Q(document__location_id=2)) |
+                (Q(document__doc_type=3) & Q(document__to_location_id=2))
+        )
+
+        # Расход за период (отгрузки со склада)
+        expense_filter = Q(document__doc_date__gte=date_from_obj, document__doc_date__lte=date_to_obj) & (
+                Q(document__doc_type=3) & ~Q(document__to_location_id=2)
+        )
+
+        # Базовый фильтр по товару
+        base_filter = Q(
+            product_name_id=product_name_id,
+            species_id=species_id,
+            grade_id=grade_id
+        )
+
+        # Фильтрация по размерам
+        if dimension_type == 'lumber' and dimension_id:
+            base_filter &= Q(lumber_dim_id=dimension_id)
+        elif dimension_type == 'unit' and dimension_id:
+            base_filter &= Q(unit_dim_id=dimension_id)
+        else:
+            base_filter &= Q(lumber_dim__isnull=True, unit_dim__isnull=True)
+
+        # Получаем суммы
+        initial_qs = DocumentItem.objects.filter(initial_filter & base_filter)
+        income_qs = DocumentItem.objects.filter(income_filter & base_filter)
+        expense_qs = DocumentItem.objects.filter(expense_filter & base_filter)
+
+        initial_total = initial_qs.aggregate(total=Sum('quantity'))['total'] or 0
+        income_total = income_qs.aggregate(total=Sum('quantity'))['total'] or 0
+        expense_total = expense_qs.aggregate(total=Sum('quantity'))['total'] or 0
+
+        data['initial_quantity'] = initial_total
+        data['income_quantity'] = income_total
+        data['expense_quantity'] = expense_total
+        data['ending_quantity'] = initial_total + income_total - expense_total
+
+    # Фильтруем позиции с ненулевыми значениями
+    report_list = [data for data in report_data.values()
+                   if data['initial_quantity'] != 0 or data['income_quantity'] != 0 or data['expense_quantity'] != 0 or
+                   data['ending_quantity'] != 0]
+
+    # Сортируем
+    report_list.sort(key=lambda x: (x['product_name'], x['dimension_display'], x['species'], x['grade']))
+
+    # Группируем по наименованию
+    grouped_data = {}
+    for item in report_list:
+        name = item['product_name']
+        if name not in grouped_data:
+            grouped_data[name] = {
+                'product_name': name,
+                'items': [],
+                'total_initial': 0,
+                'total_income': 0,
+                'total_expense': 0,
+                'total_ending': 0,
+            }
+        grouped_data[name]['items'].append(item)
+        grouped_data[name]['total_initial'] += item['initial_quantity']
+        grouped_data[name]['total_income'] += item['income_quantity']
+        grouped_data[name]['total_expense'] += item['expense_quantity']
+        grouped_data[name]['total_ending'] += item['ending_quantity']
+
+    # Общие итоги
+    grand_total_initial = sum(data['total_initial'] for data in grouped_data.values())
+    grand_total_income = sum(data['total_income'] for data in grouped_data.values())
+    grand_total_expense = sum(data['total_expense'] for data in grouped_data.values())
+    grand_total_ending = sum(data['total_ending'] for data in grouped_data.values())
+
+    context = {
+        'title': 'Отчет по движению продукции',
+        'date_from': date_from_obj,
+        'date_to': date_to_obj,
+        'grouped_data': grouped_data.values(),
+        'grand_total_initial': grand_total_initial,
+        'grand_total_income': grand_total_income,
+        'grand_total_expense': grand_total_expense,
+        'grand_total_ending': grand_total_ending,
+        'url_name': 'lumber_track:report_movement_result',
+    }
+
+    if request.GET.get('export') == 'excel':
+        return export_movement_to_excel(grouped_data.values(), context['title'], date_from, date_to,
+                                        grand_total_initial, grand_total_income, grand_total_expense,
+                                        grand_total_ending)
+
+    return render(request, 'lumber_track/report_movement.html', context)
+
+
+def export_movement_to_excel(grouped_data, title, date_from, date_to,
+                             grand_total_initial, grand_total_income, grand_total_expense, grand_total_ending):
+    """Экспорт отчета по движению в Excel"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Движение продукции"
+
+    # Заголовки
+    headers = ['Наименование', 'Размер', 'Порода', 'Сорт', 'Остаток на начало', 'Приход', 'Расход', 'Остаток на конец']
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+
+    row = 2
+    for group in grouped_data:
+        # Строки с деталями
+        for item in group['items']:
+            ws.cell(row=row, column=1, value=item['product_name'])
+            ws.cell(row=row, column=2, value=item['dimension_display'])
+            ws.cell(row=row, column=3, value=item['species'])
+            ws.cell(row=row, column=4, value=item['grade'])
+            ws.cell(row=row, column=5, value=float(item['initial_quantity']))
+            ws.cell(row=row, column=6, value=float(item['income_quantity']))
+            ws.cell(row=row, column=7, value=float(item['expense_quantity']))
+            ws.cell(row=row, column=8, value=float(item['ending_quantity']))
+            row += 1
+
+        # Строка итогов по группе
+        for col in range(1, 5):
+            cell = ws.cell(row=row, column=col, value=f"Итого: {group['product_name']}" if col == 1 else "")
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color='E0E0E0', end_color='E0E0E0', fill_type='solid')
+        ws.cell(row=row, column=5, value=float(group['total_initial']))
+        ws.cell(row=row, column=6, value=float(group['total_income']))
+        ws.cell(row=row, column=7, value=float(group['total_expense']))
+        ws.cell(row=row, column=8, value=float(group['total_ending']))
+        row += 1
+
+    # Общие итоги
+    for col in range(1, 5):
+        cell = ws.cell(row=row, column=col, value="ВСЕГО:" if col == 1 else "")
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    ws.cell(row=row, column=5, value=float(grand_total_initial))
+    ws.cell(row=row, column=6, value=float(grand_total_income))
+    ws.cell(row=row, column=7, value=float(grand_total_expense))
+    ws.cell(row=row, column=8, value=float(grand_total_ending))
+
+    # Настройка ширины колонок
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 20
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 12
+    ws.column_dimensions['E'].width = 18
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 15
+    ws.column_dimensions['H'].width = 18
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
+    wb.save(response)
+    return response
 
 
 # lumber_track/views.py - добавьте
 
-from .models import StorageLocation
+def report_category(request):
+    """Отчет по категориям (сводный)"""
+    if request.GET.get('date_from') and request.GET.get('date_to'):
+        date_from = request.GET.get('date_from')
+        date_to = request.GET.get('date_to')
+        return redirect(f'/reports/category/result/?date_from={date_from}&date_to={date_to}')
+    return render(request, 'lumber_track/report_form.html', {
+        'title': 'Сводный отчет по категориям',
+        'url_name': 'lumber_track:report_category_result'
+    })
 
 
-# ========== МЕСТА ХРАНЕНИЯ ==========
-# lumber_track/views.py
+def report_category_result(request):
+    """Результат сводного отчета по категориям"""
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
 
-def storagelocation_list(request):
-    items = StorageLocation.objects.all().order_by('name')
-    context = {
-        'title': 'Места хранения',
-        'items': items,
-        'create_url': '/directories/storagelocation/create/',
-        'delete_url': 'lumber_track:storagelocation_delete',
-    }
-    return render(request, 'lumber_track/directory_table.html', context)
+    if not date_from or not date_to:
+        return redirect('lumber_track:report_category')
 
-def storagelocation_create(request):
-    if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        if name:
-            StorageLocation.objects.create(name=name)
-    return redirect('lumber_track:storagelocation_list')
+    from django.db.models import Sum, Q
+    from datetime import datetime
 
-def storagelocation_edit(request, pk):
-    item = get_object_or_404(StorageLocation, pk=pk)
-    if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        if name:
-            item.name = name
-            item.save()
-    return redirect('lumber_track:storagelocation_list')
+    date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+    date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
 
-def storagelocation_delete(request, pk):
-    item = get_object_or_404(StorageLocation, pk=pk)
-    item.delete()
-    return redirect('lumber_track:storagelocation_list')
+    # Получаем все уникальные позиции (наименование + размер)
+    all_items = DocumentItem.objects.select_related(
+        'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'
+    ).filter(
+        document__doc_date__lte=date_to_obj
+    )
 
-def storagelocation_data(request, pk):
-    item = get_object_or_404(StorageLocation, pk=pk)
-    return JsonResponse({'name': item.name})
+    # Собираем данные по каждой позиции
+    report_data = {}
+    categories = ['A', 'B', 'C', 'D']
 
-
-# lumber_track/views.py
-
-# lumber_track/views.py
-
-def document_edit(request, pk):
-    """Редактирование документа"""
-    doc = get_object_or_404(Document, pk=pk)
-    doc_type = doc.doc_type
-    doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc_type, 'Документ')
-
-    # Для расхода - извлекаем "куда перемещается" из примечания
-    to_location_id = None
-    to_location_name = None
-    original_note = doc.note
-
-    if doc_type == 3 and doc.note:
-        # Ищем "Перемещено в:" в примечании
-        import re
-        match = re.search(r'Перемещено в: (.+)', doc.note)
-        if match:
-            to_location_name = match.group(1).strip()
-            # Убираем эту строку из примечания для отображения
-            original_note = re.sub(r'\n?Перемещено в: .+', '', doc.note).strip()
-
-    if request.method == 'POST':
-        # Обновляем шапку документа
-        doc.doc_number = request.POST.get('doc_number')
-        doc.doc_date = request.POST.get('doc_date')
-
-        # Для расхода - сохраняем "куда перемещается"
-        if doc_type == 3:
-            to_location_id = request.POST.get('to_location')
-            to_location = StorageLocation.objects.get(id=to_location_id)
-            note_text = request.POST.get('note', '')
-            new_note = f"{note_text}\nПеремещено в: {to_location.name}" if note_text else f"Перемещено в: {to_location.name}"
-            doc.note = new_note
+    for item in all_items:
+        # Определяем размер
+        if item.lumber_dim:
+            thickness = item.lumber_dim.thickness
+            width = item.lumber_dim.width
+            length = item.lumber_dim.length
+            dimension_display = f"{thickness}×{width}×{length}"
+            dimension_type = 'lumber'
+            dimension_id = item.lumber_dim.id
+        elif item.unit_dim:
+            thickness = item.unit_dim.length
+            width = item.unit_dim.width
+            height = item.unit_dim.height
+            dimension_display = f"{thickness}×{width}×{height}"
+            dimension_type = 'unit'
+            dimension_id = item.unit_dim.id
         else:
-            doc.note = request.POST.get('note', '')
+            thickness = width = length = 0
+            dimension_display = "—"
+            dimension_type = None
+            dimension_id = None
 
-        doc.save()
+        key = f"{item.product_name_id}_{dimension_id}_{dimension_type}"
 
-        # Удаляем старые позиции
-        doc.items.all().delete()
+        if key not in report_data:
+            report_data[key] = {
+                'product_name': item.product_name.name,
+                'thickness': thickness,
+                'width': width,
+                'length': length,
+                'dimension_display': dimension_display,
+                'dimension_type': dimension_type,
+                'dimension_id': dimension_id,
+                'initial': {cat: 0 for cat in categories},
+                'initial_volume': {cat: 0 for cat in categories},
+                'initial_area': {cat: 0 for cat in categories},
+                'income_production': {cat: 0 for cat in categories},
+                'income_production_volume': {cat: 0 for cat in categories},
+                'income_production_area': {cat: 0 for cat in categories},
+                'to_stock': {cat: 0 for cat in categories},
+                'to_stock_volume': {cat: 0 for cat in categories},
+                'to_stock_area': {cat: 0 for cat in categories},
+                'to_shop': {cat: 0 for cat in categories},
+                'to_shop_volume': {cat: 0 for cat in categories},
+                'to_shop_area': {cat: 0 for cat in categories},
+                'ending': {cat: 0 for cat in categories},
+                'ending_volume': {cat: 0 for cat in categories},
+                'ending_area': {cat: 0 for cat in categories},
+            }
 
-        if doc_type == 3:  # Расход
-            # Сохраняем позиции из формы расхода
-            stock_items = request.POST.getlist('stock_item[]')
-            quantities = request.POST.getlist('quantity[]')
-            product_names = request.POST.getlist('product_name[]')
-            species_list = request.POST.getlist('species[]')
-            grades_list = request.POST.getlist('grade[]')
-            dimension_ids = request.POST.getlist('dimension_id[]')
-            dimension_types = request.POST.getlist('dimension_type[]')
+    # Собираем данные по каждому ключу
+    for key, data in report_data.items():
+        product_name = data['product_name']
+        dimension_id = data['dimension_id']
+        dimension_type = data['dimension_type']
 
-            for i in range(len(stock_items)):
-                if not stock_items[i]:
-                    continue
+        for grade_code in categories:
+            grade = QualityGrade.objects.filter(code=grade_code).first()
+            if not grade:
+                continue
 
-                quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
-                if quantity == 0:
-                    continue
+            grade_id = grade.id
 
-                product_name_id = product_names[i] if i < len(product_names) else None
-                species_id = species_list[i] if i < len(species_list) else None
-                grade_id = grades_list[i] if i < len(grades_list) else None
-                dimension_id = dimension_ids[i] if i < len(dimension_ids) else None
-                dimension_type = dimension_types[i] if i < len(dimension_types) else None
+            # Остаток на начало
+            initial_filter = Q(document__doc_date__lt=date_from_obj) & (
+                (Q(document__doc_type=1) & Q(document__location_id=2)) |
+                (Q(document__doc_type=2) & Q(document__location_id=2)) |
+                (Q(document__doc_type=3) & Q(document__to_location_id=2))
+            ) & Q(product_name__name=product_name, grade_id=grade_id)
 
-                lumber_dim_id = None
-                unit_dim_id = None
+            # Поступление из цеха
+            income_production_filter = Q(
+                document__doc_date__gte=date_from_obj,
+                document__doc_date__lte=date_to_obj,
+                document__doc_type=2,
+                document__location_id=2
+            ) & Q(product_name__name=product_name, grade_id=grade_id)
 
-                if dimension_type == 'lumber':
-                    lumber_dim_id = dimension_id
-                elif dimension_type == 'unit':
-                    unit_dim_id = dimension_id
+            # Передано на склад
+            to_stock_filter = Q(
+                document__doc_date__gte=date_from_obj,
+                document__doc_date__lte=date_to_obj
+            ) & (
+                (Q(document__doc_type=2) & Q(document__location_id=2)) |
+                (Q(document__doc_type=3) & Q(document__to_location_id=2))
+            ) & Q(product_name__name=product_name, grade_id=grade_id)
 
-                DocumentItem.objects.create(
-                    document=doc,
-                    product_name_id=product_name_id,
-                    species_id=species_id,
-                    grade_id=grade_id,
-                    lumber_dim_id=lumber_dim_id,
-                    unit_dim_id=unit_dim_id,
-                    quantity=quantity
-                )
-        else:
-            # Для начальных остатков и прихода
-            product_names = request.POST.getlist('product_name[]')
-            species_list = request.POST.getlist('species[]')
-            grades_list = request.POST.getlist('grade[]')
-            dimension_ids = request.POST.getlist('dimension_id[]')
-            dimension_types = request.POST.getlist('dimension_type[]')
-            quantities = request.POST.getlist('quantity[]')
+            # Передано в магазин
+            to_shop_filter = Q(
+                document__doc_date__gte=date_from_obj,
+                document__doc_date__lte=date_to_obj,
+                document__doc_type=3
+            ) & ~Q(document__to_location_id=2) & Q(product_name__name=product_name, grade_id=grade_id)
 
-            for i in range(len(product_names)):
-                if not product_names[i] or not species_list[i] or not grades_list[i]:
-                    continue
+            # Фильтрация по размерам
+            if dimension_type == 'lumber' and dimension_id:
+                initial_filter &= Q(lumber_dim_id=dimension_id)
+                income_production_filter &= Q(lumber_dim_id=dimension_id)
+                to_stock_filter &= Q(lumber_dim_id=dimension_id)
+                to_shop_filter &= Q(lumber_dim_id=dimension_id)
+            elif dimension_type == 'unit' and dimension_id:
+                initial_filter &= Q(unit_dim_id=dimension_id)
+                income_production_filter &= Q(unit_dim_id=dimension_id)
+                to_stock_filter &= Q(unit_dim_id=dimension_id)
+                to_shop_filter &= Q(unit_dim_id=dimension_id)
 
-                quantity = int(quantities[i]) if i < len(quantities) and quantities[i] else 0
-                if quantity == 0:
-                    continue
+            initial_qs = DocumentItem.objects.filter(initial_filter)
+            income_production_qs = DocumentItem.objects.filter(income_production_filter)
+            to_stock_qs = DocumentItem.objects.filter(to_stock_filter)
+            to_shop_qs = DocumentItem.objects.filter(to_shop_filter)
 
-                lumber_dim_id = None
-                unit_dim_id = None
+            initial_qty = initial_qs.aggregate(total=Sum('quantity'))['total'] or 0
+            income_production_qty = income_production_qs.aggregate(total=Sum('quantity'))['total'] or 0
+            to_stock_qty = to_stock_qs.aggregate(total=Sum('quantity'))['total'] or 0
+            to_shop_qty = to_shop_qs.aggregate(total=Sum('quantity'))['total'] or 0
 
-                if i < len(dimension_ids) and dimension_ids[i]:
-                    if i < len(dimension_types) and dimension_types[i] == 'lumber':
-                        lumber_dim_id = dimension_ids[i]
-                    elif i < len(dimension_types) and dimension_types[i] == 'unit':
-                        unit_dim_id = dimension_ids[i]
+            # Объем и площадь для погонажа
+            if dimension_type == 'lumber' and dimension_id:
+                try:
+                    lumber_dim = LumberDimension.objects.get(id=dimension_id)
+                    volume_per_unit = lumber_dim.volume_m3
+                    area_per_unit = lumber_dim.area_m2
+                except LumberDimension.DoesNotExist:
+                    volume_per_unit = 0
+                    area_per_unit = 0
+            else:
+                volume_per_unit = 0
+                area_per_unit = 0
 
-                DocumentItem.objects.create(
-                    document=doc,
-                    product_name_id=product_names[i],
-                    species_id=species_list[i],
-                    grade_id=grades_list[i],
-                    lumber_dim_id=lumber_dim_id,
-                    unit_dim_id=unit_dim_id,
-                    quantity=quantity
-                )
+            data['initial'][grade_code] = initial_qty
+            data['initial_volume'][grade_code] = initial_qty * volume_per_unit
+            data['initial_area'][grade_code] = initial_qty * area_per_unit
 
-        # Перенаправляем в журнал
-        redirect_urls = {
-            1: 'lumber_track:document_initial_journal',
-            2: 'lumber_track:document_income_journal',
-            3: 'lumber_track:document_outcome_journal',
-        }
-        return redirect(redirect_urls.get(doc_type, 'lumber_track:document_initial_journal'))
+            data['income_production'][grade_code] = income_production_qty
+            data['income_production_volume'][grade_code] = income_production_qty * volume_per_unit
+            data['income_production_area'][grade_code] = income_production_qty * area_per_unit
 
-    # GET запрос
+            data['to_stock'][grade_code] = to_stock_qty
+            data['to_stock_volume'][grade_code] = to_stock_qty * volume_per_unit
+            data['to_stock_area'][grade_code] = to_stock_qty * area_per_unit
+
+            data['to_shop'][grade_code] = to_shop_qty
+            data['to_shop_volume'][grade_code] = to_shop_qty * volume_per_unit
+            data['to_shop_area'][grade_code] = to_shop_qty * area_per_unit
+
+            data['ending'][grade_code] = initial_qty + income_production_qty + to_stock_qty - to_shop_qty
+            data['ending_volume'][grade_code] = (initial_qty + income_production_qty + to_stock_qty - to_shop_qty) * volume_per_unit
+            data['ending_area'][grade_code] = (initial_qty + income_production_qty + to_stock_qty - to_shop_qty) * area_per_unit
+
+    # Фильтруем позиции с данными
+    report_list = []
+    for key, data in report_data.items():
+        has_data = False
+        for cat in categories:
+            if (data['initial'][cat] != 0 or
+                data['income_production'][cat] != 0 or
+                data['to_stock'][cat] != 0 or
+                data['to_shop'][cat] != 0 or
+                data['ending'][cat] != 0):
+                has_data = True
+                break
+        if has_data:
+            report_list.append(data)
+
+    report_list.sort(key=lambda x: x['product_name'])
+
+    # Группировка по наименованию с итогами
+    grouped_data = {}
+    for item in report_list:
+        name = item['product_name']
+        if name not in grouped_data:
+            grouped_data[name] = {
+                'product_name': name,
+                'items': [],
+                'total_initial': {cat: 0 for cat in categories},
+                'total_initial_volume': {cat: 0 for cat in categories},
+                'total_initial_area': {cat: 0 for cat in categories},
+                'total_income_production': {cat: 0 for cat in categories},
+                'total_income_production_volume': {cat: 0 for cat in categories},
+                'total_income_production_area': {cat: 0 for cat in categories},
+                'total_to_stock': {cat: 0 for cat in categories},
+                'total_to_stock_volume': {cat: 0 for cat in categories},
+                'total_to_stock_area': {cat: 0 for cat in categories},
+                'total_to_shop': {cat: 0 for cat in categories},
+                'total_to_shop_volume': {cat: 0 for cat in categories},
+                'total_to_shop_area': {cat: 0 for cat in categories},
+                'total_ending': {cat: 0 for cat in categories},
+                'total_ending_volume': {cat: 0 for cat in categories},
+                'total_ending_area': {cat: 0 for cat in categories},
+            }
+        grouped_data[name]['items'].append(item)
+        for cat in categories:
+            grouped_data[name]['total_initial'][cat] += item['initial'][cat]
+            grouped_data[name]['total_initial_volume'][cat] += item['initial_volume'][cat]
+            grouped_data[name]['total_initial_area'][cat] += item['initial_area'][cat]
+            grouped_data[name]['total_income_production'][cat] += item['income_production'][cat]
+            grouped_data[name]['total_income_production_volume'][cat] += item['income_production_volume'][cat]
+            grouped_data[name]['total_income_production_area'][cat] += item['income_production_area'][cat]
+            grouped_data[name]['total_to_stock'][cat] += item['to_stock'][cat]
+            grouped_data[name]['total_to_stock_volume'][cat] += item['to_stock_volume'][cat]
+            grouped_data[name]['total_to_stock_area'][cat] += item['to_stock_area'][cat]
+            grouped_data[name]['total_to_shop'][cat] += item['to_shop'][cat]
+            grouped_data[name]['total_to_shop_volume'][cat] += item['to_shop_volume'][cat]
+            grouped_data[name]['total_to_shop_area'][cat] += item['to_shop_area'][cat]
+            grouped_data[name]['total_ending'][cat] += item['ending'][cat]
+            grouped_data[name]['total_ending_volume'][cat] += item['ending_volume'][cat]
+            grouped_data[name]['total_ending_area'][cat] += item['ending_area'][cat]
+
     context = {
-        'doc': doc,
-        'doc_type': doc_type,
-        'doc_type_name': doc_type_name,
-        'original_note': original_note,
-        'to_location_name': to_location_name,
-        'product_names': ProductName.objects.all().select_related('product_type'),
-        'species_list': WoodSpecies.objects.all().order_by('name'),
-        'grades_list': QualityGrade.objects.all().order_by('code'),
-        'lumber_dims': LumberDimension.objects.all().order_by('thickness', 'width', 'length'),
-        'unit_dims': UnitDimension.objects.all().order_by('length', 'width', 'height'),
-        'locations': StorageLocation.objects.all().order_by('name'),
-        'items': doc.items.all().select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'),
+        'title': 'Сводный отчет по категориям',
+        'date_from': date_from_obj,
+        'date_to': date_to_obj,
+        'grouped_data': grouped_data.values(),
+        'categories': categories,
+        'url_name': 'lumber_track:report_category_result',
     }
 
-    # Для расхода - добавляем остатки (исключая текущий документ)
-    if doc_type == 3:
-        available_stocks = get_available_stocks_with_details(
-            location_id=2,  # склад
-            exclude_document_id=doc.id  # <-- ЭТО ГЛАВНОЕ: исключаем текущий документ
-        )
-        context['available_stocks'] = available_stocks
-        return render(request, 'lumber_track/document_outcome_edit.html', context)
-    else:
-        return render(request, 'lumber_track/document_edit.html', context)
+    if request.GET.get('export') == 'excel':
+        return export_category_to_excel(grouped_data.values(), categories, context['title'], date_from, date_to)
+
+    return render(request, 'lumber_track/report_category.html', context)
+def export_category_to_excel(grouped_data, categories, title, date_from, date_to):
+    """Экспорт сводного отчета в Excel"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Сводный отчет"
+
+    # Стили
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    subheader_font = Font(bold=True)
+    subheader_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+    total_fill = PatternFill(start_color='E0E0E0', end_color='E0E0E0', fill_type='solid')
+
+    # Заголовки
+    col = 1
+    ws.cell(row=1, column=col, value="Наименование")
+    ws.cell(row=2, column=col, value="Размер, мм")
+    col += 1
+
+    # Размеры (толщина, ширина, длина)
+    ws.cell(row=1, column=col, value="Размер, мм")
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 2)
+    ws.cell(row=2, column=col, value="Толщина")
+    ws.cell(row=2, column=col + 1, value="Ширина")
+    ws.cell(row=2, column=col + 2, value="Длина")
+    col += 3
+
+    # Остаток на начало периода
+    ws.cell(row=1, column=col, value="Остаток на начало периода")
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
+    for i, cat in enumerate(categories):
+        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
+    col += len(categories)
+
+    # Поступление из цеха
+    ws.cell(row=1, column=col, value="Поступление из цеха")
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
+    for i, cat in enumerate(categories):
+        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
+    col += len(categories)
+
+    # Передано на склад
+    ws.cell(row=1, column=col, value="Передано на склад")
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
+    for i, cat in enumerate(categories):
+        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
+    col += len(categories)
+
+    # Передано в магазин
+    ws.cell(row=1, column=col, value="Передано в магазин")
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
+    for i, cat in enumerate(categories):
+        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
+    col += len(categories)
+
+    # Остаток на конец периода
+    ws.cell(row=1, column=col, value="Остаток на конец периода")
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
+    for i, cat in enumerate(categories):
+        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
+
+    # Оформление заголовков
+    for col in range(1, ws.max_column + 1):
+        cell1 = ws.cell(row=1, column=col)
+        cell1.font = header_font
+        cell1.alignment = Alignment(horizontal='center', vertical='center')
+        cell1.fill = header_fill
+        cell2 = ws.cell(row=2, column=col)
+        cell2.font = subheader_font
+        cell2.alignment = Alignment(horizontal='center', vertical='center')
+        cell2.fill = subheader_fill
+
+    # Данные
+    row = 3
+    for group in grouped_data:
+        for item in group['items']:
+            ws.cell(row=row, column=1, value=item['product_name'])
+            ws.cell(row=row, column=2, value=item['thickness'] if item['thickness'] else "")
+            ws.cell(row=row, column=3, value=item['width'] if item['width'] else "")
+            ws.cell(row=row, column=4, value=item['length'] if item['length'] else "")
+
+            col = 5
+            for cat in categories:
+                ws.cell(row=row, column=col, value=float(item['initial'][cat]))
+                col += 1
+            for cat in categories:
+                ws.cell(row=row, column=col, value=float(item['income_production'][cat]))
+                col += 1
+            for cat in categories:
+                ws.cell(row=row, column=col, value=float(item['to_stock'][cat]))
+                col += 1
+            for cat in categories:
+                ws.cell(row=row, column=col, value=float(item['to_shop'][cat]))
+                col += 1
+            for cat in categories:
+                ending = item['initial'][cat] + item['income_production'][cat] - item['to_shop'][cat]
+                ws.cell(row=row, column=col, value=float(ending))
+                col += 1
+            row += 1
+
+        # Итоги по группе
+        ws.row_dimensions[row].fill = total_fill
+        ws.cell(row=row, column=1, value=f"Итого: {group['product_name']}")
+        ws.cell(row=row, column=1).font = Font(bold=True)
+        col = 5
+        for cat in categories:
+            ws.cell(row=row, column=col, value=float(group['total_initial'][cat]))
+            col += 1
+        for cat in categories:
+            ws.cell(row=row, column=col, value=float(group['total_income_production'][cat]))
+            col += 1
+        for cat in categories:
+            ws.cell(row=row, column=col, value=float(group['total_to_stock'][cat]))
+            col += 1
+        for cat in categories:
+            ws.cell(row=row, column=col, value=float(group['total_to_shop'][cat]))
+            col += 1
+        for cat in categories:
+            ending = group['total_initial'][cat] + group['total_income_production'][cat] - group['total_to_shop'][cat]
+            ws.cell(row=row, column=col, value=float(ending))
+            col += 1
+        row += 1
+
+    # Настройка ширины колонок
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 12
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
+    wb.save(response)
+    return response

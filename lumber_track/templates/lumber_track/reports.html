@@ -1,0 +1,100 @@
+<!-- lumber_track/templates/lumber_track/reports.html -->
+{% extends 'lumber_track/base.html' %}
+
+{% block title %}Отчеты{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="h2 mb-3">
+            <i class="bi bi-graph-up"></i> Отчеты
+        </h1>
+        <p class="text-muted">Аналитика движения продукции</p>
+        <hr>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Отчет: Поступление -->
+    <div class="col-md-3">
+        <a href="{% url 'lumber_track:report_income' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-arrow-down-circle text-primary" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">Поступление</h5>
+                    <p class="card-text text-muted small">Отчет по поступлению продукции</p>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Отчет: На склад -->
+    <div class="col-md-3">
+        <a href="{% url 'lumber_track:report_to_stock' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-building text-success" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">На склад</h5>
+                    <p class="card-text text-muted small">Поступление на склад</p>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Отчет: В магазин -->
+    <div class="col-md-3">
+        <a href="{% url 'lumber_track:report_to_shop' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-shop text-warning" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">В магазин</h5>
+                    <p class="card-text text-muted small">Отгрузка в магазин</p>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Отчет: Движение продукции -->
+    <div class="col-md-3">
+        <a href="{% url 'lumber_track:report_movement' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-graph-up-arrow text-info" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">Движение продукции</h5>
+                    <p class="card-text text-muted small">Остатки, приход, расход за период</p>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+<!-- Отчет: Сводный по категориям -->
+<div class="col-md-3">
+    <a href="{% url 'lumber_track:report_category' %}" class="text-decoration-none">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-table text-danger" style="font-size: 48px;"></i>
+                <h5 class="card-title mt-3">Сводный по категориям</h5>
+                <p class="card-text text-muted small">Детальный отчет с разбивкой по категориям</p>
+            </div>
+        </div>
+    </a>
+</div>
+
+<!-- Дополнительная информация -->
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="alert alert-light border shadow-sm">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-info-circle fs-3 me-3 text-primary"></i>
+                <div>
+                    <h6 class="mb-1">Информация по отчетам</h6>
+                    <p class="mb-0 text-muted small">
+                        Выберите тип отчета, затем укажите период для формирования.
+                        Отчет "Движение продукции" показывает остатки на начало, приход, расход и остатки на конец периода.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

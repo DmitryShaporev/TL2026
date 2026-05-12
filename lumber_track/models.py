@@ -166,12 +166,10 @@ class Document(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
 
     # Новое поле - место хранения
-    location = models.ForeignKey(
-        'StorageLocation',
-        on_delete=models.PROTECT,
-
-        verbose_name="Место хранения"
-    )
+    location = models.ForeignKey(StorageLocation, on_delete=models.PROTECT, related_name='documents_from',
+                                 verbose_name="Откуда")
+    to_location = models.ForeignKey(StorageLocation, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name='documents_to', verbose_name="Куда")
 
     class Meta:
         ordering = ['-doc_date', '-created_at']
