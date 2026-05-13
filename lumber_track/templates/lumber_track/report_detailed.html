@@ -1,70 +1,7 @@
-<!-- lumber_track/templates/lumber_track/report_result.html -->
+<!-- lumber_track/templates/lumber_track/report_detailed.html -->
 {% extends 'lumber_track/base.html' %}
 
 {% block title %}{{ title }} - результаты{% endblock %}
-
-{% block extra_css %}
-<style>
-
-    .date-header-row td {
-        padding: 8px 12px !important;
-    }
-
-
-
-
-
-
-
-
-/* Общие границы */
-    .table-bordered td,
-    .table-bordered th,
-    .table td,
-    .table th {
-        border: 1px solid #000000 !important;
-    }
-
-    thead th {
-        border-bottom-width: 2px !important;
-    }
-
-
-    .date-header-row td {
-        padding: 10px 12px !important;
-        background-color: #d9edf7 !important;
-        color: black !important;
-    }
-
-
-    .day-total-row td {
-        padding: 8px 12px !important;
-        background-color: #fcf8e3 !important;
-    }
-
-    /* Детальные строки с чередованием */
-    .data-row td {
-        padding: 6px 12px !important;
-    }
-    .data-row:nth-child(even) {
-        background-color: #f8f9fa;
-    }
-
-    /* Итоговая строка за весь период */
-    .grand-total-row {
-        background-color: #f0ad4e !important;
-        font-weight: bold;
-        font-size: 1.05rem;
-    }
-    .grand-total-row td {
-        background-color: #f0ad4e !important;
-        padding: 10px 12px !important;
-    }
-
-</style>
-
-
-{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
@@ -72,7 +9,7 @@
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <h1 class="h2 mb-3">
-                    <i class="bi bi-graph-up"></i> {{ title }}
+                    <i class="bi bi-calendar-week"></i> {{ title }}
                 </h1>
                 <p class="text-muted">
                     Период: {{ date_from|date:"d.m.Y" }} - {{ date_to|date:"d.m.Y" }}
@@ -111,7 +48,9 @@
                            class="form-control border-start-0"
                            id="searchInput"
                            placeholder="Поиск по таблице...">
-
+                    <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                        <i class="bi bi-x-circle"></i> Очистить
+                    </button>
                 </div>
             </div>
         </div>
@@ -122,51 +61,39 @@
     <div class="col-12">
         <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-                <div class="table-responsive ">
-                    <table class="table table-bordered table-hover mb-0" id="reportTable">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="reportTable">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 25%;">Наименование</th>
-                                <th style="width: 12%;">Порода</th>
-                                <th style="width: 8%;">Категория</th>
-                                <th style="width: 25%;">Размер</th>
-                                <th class="text-end" style="width: 10%;">Кол-во (шт)</th>
-                                <th class="text-end" style="width: 10%;">Объем (м³)</th>
-                                <th class="text-end" style="width: 10%;">Площадь (м²)</th>
+                                <th>Дата</th>
+                                <th>№ документа</th>
+                                <th>Тип документа</th>
+                                <th>Наименование</th>
+                                <th>Порода</th>
+                                <th>Категория</th>
+                                <th>Размер</th>
+                                <th class="text-end">Кол-во (шт)</th>
+                                <th class="text-end">Объем (м³)</th>
+                                <th class="text-end">Площадь (м²)</th>
                             </tr>
                         </thead>
                         <tbody id="tableBody">
                             {% for item in report_data %}
-                                {% if item.is_date_header %}
-                                    <!-- Заголовок даты -->
-                                    <tr class="date-header-row">
-                                        <td colspan="7">
-                                            <i class="bi bi-calendar3"></i> <strong>{{ item.date|date:"d.m.Y" }}</strong>
-                                        </td>
-                                    </tr>
-                                {% elif item.is_day_total %}
-                                    <!-- Итоги за день -->
-                                    <tr class="day-total-row">
-                                        <td colspan="4" class="text-end fw-bold">Итого за день:</td>
-                                        <td class="text-end fw-bold">{{ item.total_quantity }}</td>
-                                        <td class="text-end fw-bold">{{ item.total_volume|floatformat:3 }}</td>
-                                        <td class="text-end fw-bold">{{ item.total_area|floatformat:2 }}</td>
-                                    </tr>
-                                {% else %}
-                                    <!-- Детальные строки -->
-                                    <tr class="data-row">
-                                        <td>{{ item.product_name }}</strong></td>
-                                        <td>{{ item.species }}</strong></td>
-                                        <td>{{ item.grade }}</strong></td>
-                                        <td>{{ item.dimension_display }}</strong></td>
-                                        <td class="text-end">{{ item.total_quantity }}</strong></td>
-                                        <td class="text-end">{{ item.total_volume|floatformat:3 }}</strong></td>
-                                        <td class="text-end">{{ item.total_area|floatformat:2 }}</strong></td>
-                                    </tr>
-                                {% endif %}
+                            <tr>
+                                <td class="text-nowrap">{{ item.doc_date|date:"d.m.Y" }}</td>
+                                <td>{{ item.doc_number }}</td>
+                                <td>{{ item.doc_type }}</td>
+                                <td>{{ item.product_name }}</td>
+                                <td>{{ item.species }}</td>
+                                <td>{{ item.grade }}</td>
+                                <td>{{ item.dimension_display }}</td>
+                                <td class="text-end">{{ item.quantity }}</td>
+                                <td class="text-end">{{ item.volume|floatformat:3 }}</td>
+                                <td class="text-end">{{ item.area|floatformat:3 }}</td>
+                            </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
+                                <td colspan="10" class="text-center text-muted py-4">
                                     <i class="bi bi-inbox fs-1 d-block mb-2"></i>
                                     Нет данных за выбранный период
                                 </td>
@@ -175,10 +102,10 @@
                         </tbody>
                         <tfoot class="table-light">
                             <tr>
-                                <th colspan="4" class="text-end">ВСЕГО за период:</th>
-                                <th class="text-end"><strong>{{ grand_total_quantity|floatformat:0 }}</strong></th>
-                                <th class="text-end"><strong>{{ grand_total_volume|floatformat:3 }}</strong></th>
-                                <th class="text-end"><strong>{{ grand_total_area|floatformat:2 }}</strong></th>
+                                <th colspan="7" class="text-end">Итого:</th>
+                                <th class="text-end">{{ total_quantity|floatformat:0 }}</th>
+                                <th class="text-end">{{ total_volume|floatformat:3 }}</th>
+                                <th class="text-end">{{ total_area|floatformat:3 }}</th>
                             </tr>
                         </tfoot>
                     </table>
@@ -203,7 +130,6 @@
 
             rows.forEach(row => {
                 const rowText = row.innerText.toLowerCase();
-                // Пропускаем строки с датой и итогами при поиске, но если есть совпадение в них - показываем
                 if (searchTerm === '' || rowText.includes(searchTerm)) {
                     row.style.display = '';
                     hasVisibleRows = true;
@@ -217,7 +143,7 @@
                 if (!noResultsRow) {
                     noResultsRow = document.createElement('tr');
                     noResultsRow.id = 'noResultsRow';
-                    noResultsRow.innerHTML = '<td colspan="7" class="text-center text-muted py-4">🔍 Ничего не найдено<\/td>';
+                    noResultsRow.innerHTML = '<td colspan="10" class="text-center text-muted py-4">🔍 Ничего не найдено</td>';
                     tableBody.appendChild(noResultsRow);
                 }
             } else if (noResultsRow) {
@@ -254,15 +180,11 @@
                 printWindow.document.write(link.outerHTML);
             });
 
-            printWindow.document.write('<style>');
-            printWindow.document.write('@media print { .btn, .d-flex.gap-2, .input-group, #printBtn, #searchInput, #clearSearch { display: none !important; } }');
-            printWindow.document.write('.date-header-row td { background-color: #e9ecef !important; }');
-            printWindow.document.write('.day-total-row td { background-color: #f8f9fa !important; }');
-            printWindow.document.write('</style>');
+            printWindow.document.write('<style>@media print { .btn, .d-flex.gap-2, .input-group, #printBtn, #searchInput, #clearSearch { display: none !important; } }</style>');
             printWindow.document.write('</head><body>');
 
             const headerDiv = document.querySelector('.d-flex.justify-content-between .d-flex:first-child');
-            if (headerDiv) printWindow.document.write(headerDiv.cloneNode(true).outerHTML);
+            if (headerDiv) printWindow.document.write(headerDiv.outerHTML);
 
             const table = document.querySelector('.table');
             if (table) printWindow.document.write(table.outerHTML);

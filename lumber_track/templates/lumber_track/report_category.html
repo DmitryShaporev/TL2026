@@ -5,6 +5,15 @@
 
 {% block extra_css %}
 <style>
+        .col-initial-cell { background-color: #e8f4f8 !important; }
+    .col-income-cell { background-color: #d4edda !important; }
+    .col-stock-cell { background-color: #fff3cd !important; }
+    .col-shop-cell { background-color: #f8d7da !important; }
+
+    .species-header td {
+        background-color: #e9ecef !important;
+        padding: 8px 12px !important;
+    }
     .table-bordered, .table-bordered td, .table-bordered th {
         border: 1px solid #000000 !important;
     }
@@ -147,6 +156,99 @@
     .btn-scroll-right {
         right: 0;
     }
+
+    /* Четкие границы для всех ячеек */
+.table-bordered td,
+.table-bordered th,
+.table td,
+.table th {
+    border: 1px solid #000000 !important;
+}
+
+/* Убираем двойные границы у закрепленных колонок */
+.sticky-col-1, .sticky-col-2, .sticky-col-3, .sticky-col-4,
+.sticky-col-header-1, .sticky-col-header-2, .sticky-col-header-3, .sticky-col-header-4 {
+    border-left: 1px solid #000000 !important;
+}
+  .sticky-col-1 {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    min-width: 150px;
+    border-right: 3px solid #000000 !important;
+    box-shadow: 3px 0 5px -2px rgba(0,0,0,0.2);
+}
+    /* Закрепление 4 колонок с фоном и границами */
+.sticky-col-1, .sticky-col-header-1 {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    min-width: 150px;
+    background-color: #fff !important;
+    border-right: 2px solid #000000 !important;
+    box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+}
+.sticky-col-2, .sticky-col-header-2 {
+    position: sticky;
+    left: 150px;
+    z-index: 10;
+    min-width: 50px;
+    background-color: #fff !important;
+    border-right: 1px solid #000000 !important;
+}
+.sticky-col-3, .sticky-col-header-3 {
+    position: sticky;
+    left: 200px;
+    z-index: 10;
+    min-width: 50px;
+    background-color: #fff !important;
+    border-right: 1px solid #000000 !important;
+}
+.sticky-col-4, .sticky-col-header-4 {
+    position: sticky;
+    left: 250px;
+    z-index: 10;
+    min-width: 50px;
+    background-color: #fff !important;
+    border-right: 1px solid #000000 !important;
+}
+
+/* Заголовки закрепленных колонок - более высокий z-index */
+.sticky-col-header-1, .sticky-col-header-2, .sticky-col-header-3, .sticky-col-header-4 {
+    z-index: 15;
+    background-color: #f8f9fa !important;
+}
+
+/* Убираем двойные границы внутри закрепленных колонок */
+.sticky-col-1, .sticky-col-2, .sticky-col-3, .sticky-col-4,
+.sticky-col-header-1, .sticky-col-header-2, .sticky-col-header-3, .sticky-col-header-4 {
+    border-left: 1px solid #000000 !important;
+}
+
+    @media print {
+    /* Тонкие границы для всех ячеек */
+    .table td,
+    .table th,
+    .table-bordered td,
+    .table-bordered th {
+        border: 0.5px solid #000000 !important;
+        border-collapse: collapse !important;
+    }
+
+    /* Более толстая граница для итоговых строк */
+    .total-row td,
+    .total-row th {
+        border-top: 1px solid #000000 !important;
+        border-bottom: 1px solid #000000 !important;
+    }
+
+    /* Убираем фоновые цвета для экономии тонера (опционально) */
+    /*
+    .col-initial-cell, .col-income-cell, .col-stock-cell, .col-shop-cell {
+        background-color: transparent !important;
+    }
+    */
+}
 </style>
 {% endblock %}
 
@@ -159,21 +261,49 @@
                 <h1 class="h2 mb-3"><i class="bi bi-table"></i> {{ title }}</h1>
                 <p class="text-muted">Период: {{ date_from|date:"d.m.Y" }} - {{ date_to|date:"d.m.Y" }}</p>
             </div>
-            <div>
-                <a href="{% url url_name %}?date_from={{ date_from|date:'Y-m-d' }}&date_to={{ date_to|date:'Y-m-d' }}&export=excel" class="btn btn-success">
-                    <i class="bi bi-file-excel"></i> Экспорт в Excel
-                </a>
-            </div>
+            <div class="d-flex">
+    <a href="{% url 'lumber_track:reports_page' %}" class="btn btn-outline-secondary me-2">
+        <i class="bi bi-arrow-left"></i> Назад к отчетам
+    </a>
+    <a href="{% url url_name %}" class="btn btn-outline-primary me-2">
+        <i class="bi bi-calendar-range"></i> Новый период
+    </a>
+    <a href="{% url url_name %}?date_from={{ date_from|date:'Y-m-d' }}&date_to={{ date_to|date:'Y-m-d' }}&export=excel" class="btn btn-success me-2">
+        <i class="bi bi-file-excel"></i> Экспорт в Excel
+    </a>
+    <button type="button" class="btn btn-info" id="printBtn">
+        <i class="bi bi-printer"></i> Печать
+    </button>
+</div>
         </div>
-        <hr>
+
     </div>
 </div>
+ <!-- Поле поиска -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body py-2">
+                <div class="input-group">
+                    <span class="input-group-text bg-white">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text"
+                           class="form-control border-start-0"
+                           id="searchInput"
+                           placeholder="Поиск по наименованию, породе, размеру...">
 
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 <div class="row">
 <div class="scroll-buttons">
     <button class="btn-scroll btn-scroll-left" id="scrollLeftBtn" title="Прокрутить влево">◀</button>
     <button class="btn-scroll btn-scroll-right" id="scrollRightBtn" title="Прокрутить вправо">▶</button>
 </div>
+
     <div class="col-12">
 
         <div class="card shadow-sm border-0">
@@ -183,208 +313,226 @@
 
                     <table class="table table-bordered mb-0">
                         <thead>
-                            <tr class=" text-center">
-                                <th class="sticky-col-header-1">Наименование</th>
-<th class="sticky-col-header-2">Толщ</th>
-<th class="sticky-col-header-3">Шир</th>
-<th class="sticky-col-header-4">Дл</th>
-                                <th colspan="4" class="col-initial">Ост. нач. (шт)</th>
-                                <th colspan="4" class="col-initial">Ост. нач. (м³)</th>
-                                <th colspan="4" class="col-initial">Ост. нач. (м²)</th>
-                                <th colspan="4" class="col-income">Приход (шт)</th>
-                                <th colspan="4" class="col-income">Приход (м³)</th>
-                                <th colspan="4" class="col-income">Приход (м²)</th>
-                                <th colspan="4" class="col-stock">На склад (шт)</th>
-                                <th colspan="4" class="col-stock">На склад (м³)</th>
-                                <th colspan="4" class="col-stock">На склад (м²)</th>
-                                <th colspan="4" class="col-shop">В магазин (шт)</th>
-                                <th colspan="4" class="col-shop">В магазин (м³)</th>
-                                <th colspan="4" class="col-shop">В магазин (м²)</th>
-                                <th colspan="4" class="col-ending">Ост. кон. (шт)</th>
-                                <th colspan="4" class="col-ending">Ост. кон. (м³)</th>
-                                <th colspan="4" class="col-ending">Ост. кон. (м²)</th>
-                            </tr>
-                            <tr class="table-primary text-center">
-                                <th class="sticky-col-header-1"></th>
-<th class="sticky-col-header-2">(мм)</th>
-<th class="sticky-col-header-3">(мм)</th>
-<th class="sticky-col-header-4">(мм)</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                                <th>A</th><th>B</th><th>C</th><th>D</th>
-                            </tr>
-                        </thead>
+    <tr class="text-center align-middle">
+        <th rowspan="3" class="sticky-col-header-1">Наименование</th>
+        <th colspan="3" rowspan="2" class="sticky-col-header-2">Размер, мм</th>
+        <th colspan="12" class="col-initial">Остаток на начало периода</th>
+        <th colspan="12" class="col-income">Поступление из  ЦСИ </th>
+        <th colspan="12" class="col-stock">Передано в магазин Стрелка</th>
+        <th colspan="12" class="col-shop">Отправлено в магазин Красноярск</th>
+        <th colspan="12" class="col-ending">Остаток на конец периода</th>
+    </tr>
+    <tr class="text-center">
+        <!-- Остаток на начало -->
+        <th colspan="4">Кол-во (шт)</th>
+        <th colspan="4">Объем (м³)</th>
+        <th colspan="4">Площадь (м²)</th>
+        <!-- Поступление из цеха -->
+        <th colspan="4">Кол-во (шт)</th>
+        <th colspan="4">Объем (м³)</th>
+        <th colspan="4">Площадь (м²)</th>
+        <!-- Передано на склад -->
+        <th colspan="4">Кол-во (шт)</th>
+        <th colspan="4">Объем (м³)</th>
+        <th colspan="4">Площадь (м²)</th>
+        <!-- Передано в магазин -->
+        <th colspan="4">Кол-во (шт)</th>
+        <th colspan="4">Объем (м³)</th>
+        <th colspan="4">Площадь (м²)</th>
+        <!-- Остаток на конец -->
+        <th colspan="4">Кол-во (шт)</th>
+        <th colspan="4">Объем (м³)</th>
+        <th colspan="4">Площадь (м²)</th>
+    </tr>
+    <tr class="text-center">
+        <th class="sticky-col-header-2">Толщ</th>
+        <th class="sticky-col-header-3">Шир</th>
+        <th class="sticky-col-header-4">Дл</th>
+        <!-- Категории для Остаток на начало -->
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <!-- Категории для Поступление -->
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <!-- Категории для Передано на склад -->
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <!-- Категории для Передано в магазин -->
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <!-- Категории для Остаток на конец -->
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+        <th>A</th><th>B</th><th>C</th><th>D</th>
+    </tr>
+</thead>
                         <tbody>
-                            {% for group in grouped_data %}
-                                {% for item in group.items %}
-                                <tr>
-                                    <td class="sticky-col-1"><strong>{{ item.product_name }}</strong></td>
-<td class="sticky-col-2 text-center">{{ item.thickness|default:"-" }}</td>
-<td class="sticky-col-3 text-center">{{ item.width|default:"-" }}</td>
-<td class="sticky-col-4 text-center">{{ item.length|default:"-" }}</td>
-                                    <!-- Ост. нач. шт -->
-                                    <td class="text-end col-initial-cell">{% if item.initial.A != 0 %}{{ item.initial.A }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial.B != 0 %}{{ item.initial.B }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial.C != 0 %}{{ item.initial.C }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial.D != 0 %}{{ item.initial.D }}{% endif %}</td>
-                                    <!-- Ост. нач. м³ -->
-                                    <td class="text-end col-initial-cell">{% if item.initial_volume.A != 0 %}{{ item.initial_volume.A|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial_volume.B != 0 %}{{ item.initial_volume.B|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial_volume.C != 0 %}{{ item.initial_volume.C|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial_volume.D != 0 %}{{ item.initial_volume.D|floatformat:3 }}{% endif %}</td>
-                                    <!-- Ост. нач. м² -->
-                                    <td class="text-end col-initial-cell">{% if item.initial_area.A != 0 %}{{ item.initial_area.A|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial_area.B != 0 %}{{ item.initial_area.B|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial_area.C != 0 %}{{ item.initial_area.C|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-initial-cell">{% if item.initial_area.D != 0 %}{{ item.initial_area.D|floatformat:2 }}{% endif %}</td>
-                                    <!-- Приход шт -->
-                                    <td class="text-end col-income-cell">{% if item.income_production.A != 0 %}{{ item.income_production.A }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production.B != 0 %}{{ item.income_production.B }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production.C != 0 %}{{ item.income_production.C }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production.D != 0 %}{{ item.income_production.D }}{% endif %}</td>
-                                    <!-- Приход м³ -->
-                                    <td class="text-end col-income-cell">{% if item.income_production_volume.A != 0 %}{{ item.income_production_volume.A|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production_volume.B != 0 %}{{ item.income_production_volume.B|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production_volume.C != 0 %}{{ item.income_production_volume.C|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production_volume.D != 0 %}{{ item.income_production_volume.D|floatformat:3 }}{% endif %}</td>
-                                    <!-- Приход м² -->
-                                    <td class="text-end col-income-cell">{% if item.income_production_area.A != 0 %}{{ item.income_production_area.A|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production_area.B != 0 %}{{ item.income_production_area.B|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production_area.C != 0 %}{{ item.income_production_area.C|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-income-cell">{% if item.income_production_area.D != 0 %}{{ item.income_production_area.D|floatformat:2 }}{% endif %}</td>
-                                    <!-- На склад шт -->
-                                    <td class="text-end col-stock-cell">{% if item.to_stock.A != 0 %}{{ item.to_stock.A }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock.B != 0 %}{{ item.to_stock.B }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock.C != 0 %}{{ item.to_stock.C }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock.D != 0 %}{{ item.to_stock.D }}{% endif %}</td>
-                                    <!-- На склад м³ -->
-                                    <td class="text-end col-stock-cell">{% if item.to_stock_volume.A != 0 %}{{ item.to_stock_volume.A|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock_volume.B != 0 %}{{ item.to_stock_volume.B|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock_volume.C != 0 %}{{ item.to_stock_volume.C|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock_volume.D != 0 %}{{ item.to_stock_volume.D|floatformat:3 }}{% endif %}</td>
-                                    <!-- На склад м² -->
-                                    <td class="text-end col-stock-cell">{% if item.to_stock_area.A != 0 %}{{ item.to_stock_area.A|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock_area.B != 0 %}{{ item.to_stock_area.B|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock_area.C != 0 %}{{ item.to_stock_area.C|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-stock-cell">{% if item.to_stock_area.D != 0 %}{{ item.to_stock_area.D|floatformat:2 }}{% endif %}</td>
-                                    <!-- В магазин шт -->
-                                    <td class="text-end col-shop-cell">{% if item.to_shop.A != 0 %}{{ item.to_shop.A }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop.B != 0 %}{{ item.to_shop.B }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop.C != 0 %}{{ item.to_shop.C }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop.D != 0 %}{{ item.to_shop.D }}{% endif %}</td>
-                                    <!-- В магазин м³ -->
-                                    <td class="text-end col-shop-cell">{% if item.to_shop_volume.A != 0 %}{{ item.to_shop_volume.A|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop_volume.B != 0 %}{{ item.to_shop_volume.B|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop_volume.C != 0 %}{{ item.to_shop_volume.C|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop_volume.D != 0 %}{{ item.to_shop_volume.D|floatformat:3 }}{% endif %}</td>
-                                    <!-- В магазин м² -->
-                                    <td class="text-end col-shop-cell">{% if item.to_shop_area.A != 0 %}{{ item.to_shop_area.A|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop_area.B != 0 %}{{ item.to_shop_area.B|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop_area.C != 0 %}{{ item.to_shop_area.C|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-shop-cell">{% if item.to_shop_area.D != 0 %}{{ item.to_shop_area.D|floatformat:2 }}{% endif %}</td>
-                                    <!-- Ост. кон. шт -->
-                                    <td class="text-end  col-ending-cell">{% if item.ending.A != 0 %}{{ item.ending.A }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending.B != 0 %}{{ item.ending.B }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending.C != 0 %}{{ item.ending.C }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending.D != 0 %}{{ item.ending.D }}{% endif %}</td>
-                                    <!-- Ост. кон. м³ -->
-                                    <td class="text-end col-ending-cell">{% if item.ending_volume.A != 0 %}{{ item.ending_volume.A|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending_volume.B != 0 %}{{ item.ending_volume.B|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending_volume.C != 0 %}{{ item.ending_volume.C|floatformat:3 }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending_volume.D != 0 %}{{ item.ending_volume.D|floatformat:3 }}{% endif %}</td>
-                                    <!-- Ост. кон. м² -->
-                                    <td class="text-end col-ending-cell">{% if item.ending_area.A != 0 %}{{ item.ending_area.A|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending_area.B != 0 %}{{ item.ending_area.B|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending_area.C != 0 %}{{ item.ending_area.C|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end col-ending-cell">{% if item.ending_area.D != 0 %}{{ item.ending_area.D|floatformat:2 }}{% endif %}</td>
-                                </tr>
-                                {% endfor %}
-                                <!-- Итог по группе -->
-                                                                <!-- Итог по группе -->
-                                                                <!-- Итог по группе -->
-                                                                <!-- Итог по группе -->
-                                <tr class="total-row">
-                                    <th class="sticky-col-1" colspan="4"><strong>ИТОГО: {{ group.product_name }}</strong></th>
-                                    <!-- Остаток на начало -->
-                                    <td class="text-end"><strong>{% if group.total_initial.A != 0 %}{{ group.total_initial.A }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial.B != 0 %}{{ group.total_initial.B }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial.C != 0 %}{{ group.total_initial.C }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial.D != 0 %}{{ group.total_initial.D }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial_volume.A != 0 %}{{ group.total_initial_volume.A|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial_volume.B != 0 %}{{ group.total_initial_volume.B|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial_volume.C != 0 %}{{ group.total_initial_volume.C|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial_volume.D != 0 %}{{ group.total_initial_volume.D|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial_area.A != 0 %}{{ group.total_initial_area.A|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial_area.B != 0 %}{{ group.total_initial_area.B|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial_area.C != 0 %}{{ group.total_initial_area.C|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_initial_area.D != 0 %}{{ group.total_initial_area.D|floatformat:2 }}{% endif %}</strong></td>
-                                    <!-- Поступление -->
-                                    <td class="text-end"><strong>{% if group.total_income_production.A != 0 %}{{ group.total_income_production.A }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production.B != 0 %}{{ group.total_income_production.B }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production.C != 0 %}{{ group.total_income_production.C }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production.D != 0 %}{{ group.total_income_production.D }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production_volume.A != 0 %}{{ group.total_income_production_volume.A|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production_volume.B != 0 %}{{ group.total_income_production_volume.B|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production_volume.C != 0 %}{{ group.total_income_production_volume.C|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production_volume.D != 0 %}{{ group.total_income_production_volume.D|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production_area.A != 0 %}{{ group.total_income_production_area.A|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production_area.B != 0 %}{{ group.total_income_production_area.B|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production_area.C != 0 %}{{ group.total_income_production_area.C|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_income_production_area.D != 0 %}{{ group.total_income_production_area.D|floatformat:2 }}{% endif %}</strong></td>
-                                    <!-- На склад -->
-                                    <td class="text-end"><strong>{% if group.total_to_stock.A != 0 %}{{ group.total_to_stock.A }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock.B != 0 %}{{ group.total_to_stock.B }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock.C != 0 %}{{ group.total_to_stock.C }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock.D != 0 %}{{ group.total_to_stock.D }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock_volume.A != 0 %}{{ group.total_to_stock_volume.A|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock_volume.B != 0 %}{{ group.total_to_stock_volume.B|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock_volume.C != 0 %}{{ group.total_to_stock_volume.C|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock_volume.D != 0 %}{{ group.total_to_stock_volume.D|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock_area.A != 0 %}{{ group.total_to_stock_area.A|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock_area.B != 0 %}{{ group.total_to_stock_area.B|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock_area.C != 0 %}{{ group.total_to_stock_area.C|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_stock_area.D != 0 %}{{ group.total_to_stock_area.D|floatformat:2 }}{% endif %}</strong></td>
-                                    <!-- В магазин -->
-                                    <td class="text-end"><strong>{% if group.total_to_shop.A != 0 %}{{ group.total_to_shop.A }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop.B != 0 %}{{ group.total_to_shop.B }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop.C != 0 %}{{ group.total_to_shop.C }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop.D != 0 %}{{ group.total_to_shop.D }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop_volume.A != 0 %}{{ group.total_to_shop_volume.A|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop_volume.B != 0 %}{{ group.total_to_shop_volume.B|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop_volume.C != 0 %}{{ group.total_to_shop_volume.C|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop_volume.D != 0 %}{{ group.total_to_shop_volume.D|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop_area.A != 0 %}{{ group.total_to_shop_area.A|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop_area.B != 0 %}{{ group.total_to_shop_area.B|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop_area.C != 0 %}{{ group.total_to_shop_area.C|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_to_shop_area.D != 0 %}{{ group.total_to_shop_area.D|floatformat:2 }}{% endif %}</strong></td>
-                                    <!-- Остаток на конец -->
-                                    <td class="text-end"><strong>{% if group.total_ending.A != 0 %}{{ group.total_ending.A }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending.B != 0 %}{{ group.total_ending.B }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending.C != 0 %}{{ group.total_ending.C }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending.D != 0 %}{{ group.total_ending.D }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending_volume.A != 0 %}{{ group.total_ending_volume.A|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending_volume.B != 0 %}{{ group.total_ending_volume.B|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending_volume.C != 0 %}{{ group.total_ending_volume.C|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending_volume.D != 0 %}{{ group.total_ending_volume.D|floatformat:3 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending_area.A != 0 %}{{ group.total_ending_area.A|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending_area.B != 0 %}{{ group.total_ending_area.B|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending_area.C != 0 %}{{ group.total_ending_area.C|floatformat:2 }}{% endif %}</strong></td>
-                                    <td class="text-end"><strong>{% if group.total_ending_area.D != 0 %}{{ group.total_ending_area.D|floatformat:2 }}{% endif %}</strong></td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
+    {% for species, groups in grouped_by_species.items %}
+        <!-- Заголовок породы -->
+        <tr class="species-header">
+            <td colspan="64" class="fw-bold" style="background-color: #e9ecef; font-size: 1.1rem;">
+                <i class="bi bi-tree"></i> {{ species }}
+            </td>
+        </tr>
+        {% for group in groups.values %}
+            {% for item in group.items %}
+            <tr class="data-row">
+                <td class="sticky-col-1"><strong>{{ item.product_name }}</strong></td>
+                <td class="sticky-col-2 text-center">{{ item.thickness|default:"-" }}</td>
+                <td class="sticky-col-3 text-center">{{ item.width|default:"-" }}</td>
+                <td class="sticky-col-4 text-center">{{ item.length|default:"-" }}</td>
+                <!-- Ост. нач. шт -->
+                <td class="text-end col-initial-cell">{% if item.initial.A != 0 %}{{ item.initial.A }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial.B != 0 %}{{ item.initial.B }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial.C != 0 %}{{ item.initial.C }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial.D != 0 %}{{ item.initial.D }}{% endif %}</td>
+                <!-- Ост. нач. м³ -->
+                <td class="text-end col-initial-cell">{% if item.initial_volume.A != 0 %}{{ item.initial_volume.A|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial_volume.B != 0 %}{{ item.initial_volume.B|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial_volume.C != 0 %}{{ item.initial_volume.C|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial_volume.D != 0 %}{{ item.initial_volume.D|floatformat:3 }}{% endif %}</td>
+                <!-- Ост. нач. м² -->
+                <td class="text-end col-initial-cell">{% if item.initial_area.A != 0 %}{{ item.initial_area.A|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial_area.B != 0 %}{{ item.initial_area.B|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial_area.C != 0 %}{{ item.initial_area.C|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-initial-cell">{% if item.initial_area.D != 0 %}{{ item.initial_area.D|floatformat:2 }}{% endif %}</td>
+                <!-- Приход шт -->
+                <td class="text-end col-income-cell">{% if item.income_production.A != 0 %}{{ item.income_production.A }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production.B != 0 %}{{ item.income_production.B }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production.C != 0 %}{{ item.income_production.C }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production.D != 0 %}{{ item.income_production.D }}{% endif %}</td>
+                <!-- Приход м³ -->
+                <td class="text-end col-income-cell">{% if item.income_production_volume.A != 0 %}{{ item.income_production_volume.A|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production_volume.B != 0 %}{{ item.income_production_volume.B|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production_volume.C != 0 %}{{ item.income_production_volume.C|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production_volume.D != 0 %}{{ item.income_production_volume.D|floatformat:3 }}{% endif %}</td>
+                <!-- Приход м² -->
+                <td class="text-end col-income-cell">{% if item.income_production_area.A != 0 %}{{ item.income_production_area.A|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production_area.B != 0 %}{{ item.income_production_area.B|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production_area.C != 0 %}{{ item.income_production_area.C|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-income-cell">{% if item.income_production_area.D != 0 %}{{ item.income_production_area.D|floatformat:2 }}{% endif %}</td>
+                <!-- На склад шт -->
+                <td class="text-end col-stock-cell">{% if item.to_stock.A != 0 %}{{ item.to_stock.A }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock.B != 0 %}{{ item.to_stock.B }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock.C != 0 %}{{ item.to_stock.C }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock.D != 0 %}{{ item.to_stock.D }}{% endif %}</td>
+                <!-- На склад м³ -->
+                <td class="text-end col-stock-cell">{% if item.to_stock_volume.A != 0 %}{{ item.to_stock_volume.A|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock_volume.B != 0 %}{{ item.to_stock_volume.B|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock_volume.C != 0 %}{{ item.to_stock_volume.C|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock_volume.D != 0 %}{{ item.to_stock_volume.D|floatformat:3 }}{% endif %}</td>
+                <!-- На склад м² -->
+                <td class="text-end col-stock-cell">{% if item.to_stock_area.A != 0 %}{{ item.to_stock_area.A|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock_area.B != 0 %}{{ item.to_stock_area.B|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock_area.C != 0 %}{{ item.to_stock_area.C|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-stock-cell">{% if item.to_stock_area.D != 0 %}{{ item.to_stock_area.D|floatformat:2 }}{% endif %}</td>
+                <!-- В магазин шт -->
+                <td class="text-end col-shop-cell">{% if item.to_shop.A != 0 %}{{ item.to_shop.A }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop.B != 0 %}{{ item.to_shop.B }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop.C != 0 %}{{ item.to_shop.C }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop.D != 0 %}{{ item.to_shop.D }}{% endif %}</td>
+                <!-- В магазин м³ -->
+                <td class="text-end col-shop-cell">{% if item.to_shop_volume.A != 0 %}{{ item.to_shop_volume.A|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop_volume.B != 0 %}{{ item.to_shop_volume.B|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop_volume.C != 0 %}{{ item.to_shop_volume.C|floatformat:3 }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop_volume.D != 0 %}{{ item.to_shop_volume.D|floatformat:3 }}{% endif %}</td>
+                <!-- В магазин м² -->
+                <td class="text-end col-shop-cell">{% if item.to_shop_area.A != 0 %}{{ item.to_shop_area.A|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop_area.B != 0 %}{{ item.to_shop_area.B|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop_area.C != 0 %}{{ item.to_shop_area.C|floatformat:2 }}{% endif %}</td>
+                <td class="text-end col-shop-cell">{% if item.to_shop_area.D != 0 %}{{ item.to_shop_area.D|floatformat:2 }}{% endif %}</td>
+                <!-- Ост. кон. шт -->
+                <td class="text-end fw-bold">{% if item.ending.A != 0 %}{{ item.ending.A }}{% endif %}</td>
+                <td class="text-end fw-bold">{% if item.ending.B != 0 %}{{ item.ending.B }}{% endif %}</td>
+                <td class="text-end fw-bold">{% if item.ending.C != 0 %}{{ item.ending.C }}{% endif %}</td>
+                <td class="text-end fw-bold">{% if item.ending.D != 0 %}{{ item.ending.D }}{% endif %}</td>
+                <!-- Ост. кон. м³ -->
+                <td class="text-end">{% if item.ending_volume.A != 0 %}{{ item.ending_volume.A|floatformat:3 }}{% endif %}</td>
+                <td class="text-end">{% if item.ending_volume.B != 0 %}{{ item.ending_volume.B|floatformat:3 }}{% endif %}</td>
+                <td class="text-end">{% if item.ending_volume.C != 0 %}{{ item.ending_volume.C|floatformat:3 }}{% endif %}</td>
+                <td class="text-end">{% if item.ending_volume.D != 0 %}{{ item.ending_volume.D|floatformat:3 }}{% endif %}</td>
+                <!-- Ост. кон. м² -->
+                <td class="text-end">{% if item.ending_area.A != 0 %}{{ item.ending_area.A|floatformat:2 }}{% endif %}</td>
+                <td class="text-end">{% if item.ending_area.B != 0 %}{{ item.ending_area.B|floatformat:2 }}{% endif %}</td>
+                <td class="text-end">{% if item.ending_area.C != 0 %}{{ item.ending_area.C|floatformat:2 }}{% endif %}</td>
+                <td class="text-end">{% if item.ending_area.D != 0 %}{{ item.ending_area.D|floatformat:2 }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+            <!-- Итог по наименованию в рамках породы -->
+            <tr class="total-row">
+                <td class="sticky-col-1" colspan="4"><strong>ИТОГО: {{ group.product_name }} ({{ species }})</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial.A != 0 %}{{ group.total_initial.A }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial.B != 0 %}{{ group.total_initial.B }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial.C != 0 %}{{ group.total_initial.C }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial.D != 0 %}{{ group.total_initial.D }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial_volume.A != 0 %}{{ group.total_initial_volume.A|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial_volume.B != 0 %}{{ group.total_initial_volume.B|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial_volume.C != 0 %}{{ group.total_initial_volume.C|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial_volume.D != 0 %}{{ group.total_initial_volume.D|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial_area.A != 0 %}{{ group.total_initial_area.A|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial_area.B != 0 %}{{ group.total_initial_area.B|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial_area.C != 0 %}{{ group.total_initial_area.C|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_initial_area.D != 0 %}{{ group.total_initial_area.D|floatformat:2 }}{% endif %}</strong></td>
+
+                <td class="text-end"><strong>{% if group.total_income_production.A != 0 %}{{ group.total_income_production.A }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production.B != 0 %}{{ group.total_income_production.B }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production.C != 0 %}{{ group.total_income_production.C }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production.D != 0 %}{{ group.total_income_production.D }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production_volume.A != 0 %}{{ group.total_income_production_volume.A|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production_volume.B != 0 %}{{ group.total_income_production_volume.B|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production_volume.C != 0 %}{{ group.total_income_production_volume.C|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production_volume.D != 0 %}{{ group.total_income_production_volume.D|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production_area.A != 0 %}{{ group.total_income_production_area.A|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production_area.B != 0 %}{{ group.total_income_production_area.B|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production_area.C != 0 %}{{ group.total_income_production_area.C|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_income_production_area.D != 0 %}{{ group.total_income_production_area.D|floatformat:2 }}{% endif %}</strong></td>
+
+                <td class="text-end"><strong>{% if group.total_to_stock.A != 0 %}{{ group.total_to_stock.A }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock.B != 0 %}{{ group.total_to_stock.B }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock.C != 0 %}{{ group.total_to_stock.C }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock.D != 0 %}{{ group.total_to_stock.D }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock_volume.A != 0 %}{{ group.total_to_stock_volume.A|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock_volume.B != 0 %}{{ group.total_to_stock_volume.B|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock_volume.C != 0 %}{{ group.total_to_stock_volume.C|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock_volume.D != 0 %}{{ group.total_to_stock_volume.D|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock_area.A != 0 %}{{ group.total_to_stock_area.A|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock_area.B != 0 %}{{ group.total_to_stock_area.B|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock_area.C != 0 %}{{ group.total_to_stock_area.C|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_stock_area.D != 0 %}{{ group.total_to_stock_area.D|floatformat:2 }}{% endif %}</strong></td>
+
+                <td class="text-end"><strong>{% if group.total_to_shop.A != 0 %}{{ group.total_to_shop.A }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop.B != 0 %}{{ group.total_to_shop.B }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop.C != 0 %}{{ group.total_to_shop.C }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop.D != 0 %}{{ group.total_to_shop.D }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop_volume.A != 0 %}{{ group.total_to_shop_volume.A|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop_volume.B != 0 %}{{ group.total_to_shop_volume.B|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop_volume.C != 0 %}{{ group.total_to_shop_volume.C|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop_volume.D != 0 %}{{ group.total_to_shop_volume.D|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop_area.A != 0 %}{{ group.total_to_shop_area.A|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop_area.B != 0 %}{{ group.total_to_shop_area.B|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop_area.C != 0 %}{{ group.total_to_shop_area.C|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_to_shop_area.D != 0 %}{{ group.total_to_shop_area.D|floatformat:2 }}{% endif %}</strong></td>
+
+                <td class="text-end"><strong>{% if group.total_ending.A != 0 %}{{ group.total_ending.A }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending.B != 0 %}{{ group.total_ending.B }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending.C != 0 %}{{ group.total_ending.C }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending.D != 0 %}{{ group.total_ending.D }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending_volume.A != 0 %}{{ group.total_ending_volume.A|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending_volume.B != 0 %}{{ group.total_ending_volume.B|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending_volume.C != 0 %}{{ group.total_ending_volume.C|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending_volume.D != 0 %}{{ group.total_ending_volume.D|floatformat:3 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending_area.A != 0 %}{{ group.total_ending_area.A|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending_area.B != 0 %}{{ group.total_ending_area.B|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending_area.C != 0 %}{{ group.total_ending_area.C|floatformat:2 }}{% endif %}</strong></td>
+                <td class="text-end"><strong>{% if group.total_ending_area.D != 0 %}{{ group.total_ending_area.D|floatformat:2 }}{% endif %}</strong></td>
+            </tr>
+        {% endfor %}
+    {% endfor %}
+</tbody>
                     </table>
                 </div>
             </div>
@@ -392,16 +540,7 @@
     </div>
 </div>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <a href="{% url 'lumber_track:reports_page' %}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> Назад к отчетам
-        </a>
-        <a href="{% url url_name %}" class="btn btn-outline-primary">
-            <i class="bi bi-calendar-range"></i> Новый период
-        </a>
-    </div>
-</div>
+
 </div>
 
 <script>
@@ -424,6 +563,118 @@
                 behavior: 'smooth'
             });
         });
+    }
+</script>
+
+<script>
+    // Печать отчета
+    const printBtn = document.getElementById('printBtn');
+    if (printBtn) {
+        printBtn.addEventListener('click', function() {
+            // Сохраняем оригинальные стили
+            const originalTitle = document.title;
+            document.title = '{{ title }} за период {{ date_from|date:"d.m.Y" }} - {{ date_to|date:"d.m.Y" }}';
+
+            // Создаем копию таблицы для печати
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<!DOCTYPE html>');
+            printWindow.document.write('<html>');
+            printWindow.document.write('<head>');
+            printWindow.document.write('<meta charset="UTF-8">');
+            printWindow.document.write('<title>' + document.title + '</title>');
+
+            // Копируем все стили
+            const styles = document.querySelectorAll('style');
+            styles.forEach(style => {
+                printWindow.document.write(style.outerHTML);
+            });
+
+            // Добавляем специальные стили для печати
+            printWindow.document.write('<style>');
+printWindow.document.write('  @media print {');
+printWindow.document.write('    .btn, .btn-group, .d-flex.gap-2, .btn-outline-secondary, .btn-outline-primary, .btn-success, .btn-info, #printBtn, .scroll-buttons, #scrollLeftBtn, #scrollRightBtn { display: none !important; }');
+printWindow.document.write('    .table-responsive { overflow: visible !important; height: auto !important; }');
+printWindow.document.write('    .table thead { position: static !important; }');
+printWindow.document.write('    .sticky-col-1, .sticky-col-2, .sticky-col-3, .sticky-col-4,');
+printWindow.document.write('    .sticky-col-header-1, .sticky-col-header-2, .sticky-col-header-3, .sticky-col-header-4 {');
+printWindow.document.write('      position: static !important;');
+printWindow.document.write('    }');
+printWindow.document.write('    body { margin: 0; padding: 10px; font-size: 10pt; }');
+printWindow.document.write('    .card { box-shadow: none !important; border: 1px solid #ddd !important; }');
+printWindow.document.write('    .total-row { background-color: #e9ecef !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }');
+printWindow.document.write('    .col-initial-cell, .col-income-cell, .col-stock-cell, .col-shop-cell { -webkit-print-color-adjust: exact; print-color-adjust: exact; }');
+printWindow.document.write('    /* Тонкие границы для печати */');
+printWindow.document.write('    .table, .table td, .table th {');
+printWindow.document.write('      border: 0.5px solid #000 !important;');
+printWindow.document.write('      border-collapse: collapse !important;');
+printWindow.document.write('    }');
+printWindow.document.write('    .table-bordered td, .table-bordered th {');
+printWindow.document.write('      border: 0.5px solid #000 !important;');
+printWindow.document.write('    }');
+printWindow.document.write('  }');
+printWindow.document.write('</style>');
+
+            printWindow.document.write('</head>');
+            printWindow.document.write('<body>');
+
+            // Копируем заголовок и информацию о периоде
+            const headerDiv = document.querySelector('.d-flex.justify-content-between .d-flex:first-child');
+            if (headerDiv) {
+                const headerClone = headerDiv.cloneNode(true);
+                printWindow.document.write('<div style="margin-bottom: 20px;">');
+                printWindow.document.write(headerClone.outerHTML);
+                printWindow.document.write('</div>');
+            }
+
+            // Копируем таблицу
+            const table = document.querySelector('.table');
+            if (table) {
+                const tableClone = table.cloneNode(true);
+                printWindow.document.write(tableClone.outerHTML);
+            }
+
+            printWindow.document.write('</body>');
+            printWindow.document.write('</html>');
+            printWindow.document.close();
+
+            // Ждем загрузки и печатаем
+            printWindow.onload = function() {
+                printWindow.print();
+                printWindow.close();
+            };
+        });
+    }
+</script>
+
+<script>
+    // Поиск по таблице (упрощенный)
+    const searchInput = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('clearSearch');
+
+    if (searchInput) {
+        function filterTable() {
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const allRows = document.querySelectorAll('tbody tr');
+
+            allRows.forEach(row => {
+                const rowText = row.innerText.toLowerCase();
+                if (searchTerm === '' || rowText.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        searchInput.addEventListener('input', filterTable);
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterTable();
+                searchInput.focus();
+            });
+        }
     }
 </script>
 {% endblock %}

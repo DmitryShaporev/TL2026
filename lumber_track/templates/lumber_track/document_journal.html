@@ -21,19 +21,7 @@
 </div>
 
 <!-- Сообщения -->
-{% if messages %}
-    <div class="row mb-3">
-        <div class="col-12">
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show" role="alert">
-                    <i class="bi bi-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'error' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Закрыть"></button>
-                </div>
-            {% endfor %}
-        </div>
-    </div>
-{% endif %}
+
 
 <div class="row">
     <div class="col-12">
@@ -45,7 +33,7 @@
     <tr>
         <th>№ документа</th>
         <th>Дата документа</th>
-        <th>Место хранения</th>
+        <th>{% if doc_type == 3 %}Куда отправлено{% else %}Место хранения{% endif %}</th>
         <th>Примечание</th>
         <th>Позиции</th>
         <th>Дата создания</th>
@@ -57,14 +45,24 @@
     <tr>
         <td><strong>{{ doc.doc_number }}</strong></td>
         <td>{{ doc.doc_date|date:"d.m.Y" }}</td>
-        <td>{% if doc.location %}{{ doc.location.name }}{% else %}—{% endif %}</td>
+        <td>
+            {% if doc_type == 3 %}
+                {% if doc.to_location %}
+                    {{ doc.to_location.name }}
+                {% else %}
+                    —
+                {% endif %}
+            {% else %}
+                {% if doc.location %}{{ doc.location.name }}{% else %}—{% endif %}
+            {% endif %}
+        </td>
         <td>{{ doc.note|truncatechars:50|default:"—" }}</td>
         <td>{% if doc.has_items %}{{ doc.items.count }} позиц.{% else %}0 позиций{% endif %}</td>
         <td>{{ doc.created_at|date:"d.m.Y H:i" }}</td>
         <td>
             <a href="{% url 'lumber_track:document_edit' doc.id %}" class="btn btn-sm btn-outline-primary me-1" title="Редактировать">
-    <i class="bi bi-pencil"></i>
-</a>
+                <i class="bi bi-pencil"></i>
+            </a>
             {% if doc.has_items %}
                 <span class="btn btn-sm btn-outline-secondary disabled" title="Нельзя удалить - есть позиции">
                     <i class="bi bi-trash"></i>

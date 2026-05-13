@@ -3,6 +3,24 @@
 
 {% block title %}{{ title }} - результаты{% endblock %}
 
+{% block extra_css %}
+<style>
+    .table-bordered td,
+    .table-bordered th {
+        border: 1px solid #000000 !important;
+    }
+
+    thead th {
+        border-bottom-width: 2px !important;
+    }
+
+    .grand-total-row {
+        background-color: #f0ad4e !important;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
@@ -15,14 +33,43 @@
                     Период: {{ date_from|date:"d.m.Y" }} - {{ date_to|date:"d.m.Y" }}
                 </p>
             </div>
-            <div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'lumber_track:reports_page' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Назад к отчетам
+                </a>
+                <a href="{% url url_name %}" class="btn btn-outline-primary">
+                    <i class="bi bi-calendar-range"></i> Новый период
+                </a>
                 <a href="{% url url_name %}?date_from={{ date_from|date:'Y-m-d' }}&date_to={{ date_to|date:'Y-m-d' }}&export=excel"
                    class="btn btn-success">
                     <i class="bi bi-file-excel"></i> Экспорт в Excel
                 </a>
+                <button type="button" class="btn btn-info" id="printBtn">
+                    <i class="bi bi-printer"></i> Печать
+                </button>
             </div>
         </div>
         <hr>
+    </div>
+</div>
+
+<!-- Поле поиска -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body py-2">
+                <div class="input-group">
+                    <span class="input-group-text bg-white">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text"
+                           class="form-control border-start-0"
+                           id="searchInput"
+                           placeholder="Поиск по таблице...">
+
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -31,7 +78,7 @@
         <div class="card shadow-sm border-0">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+                    <table class="table table-hover mb-0 table-bordered" id="reportTable">
                         <thead class="table-light">
                             <tr>
                                 <th>Наименование</th>
@@ -44,7 +91,7 @@
                                 <th class="text-end">Остаток на конец</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="tableBody">
                             {% for group in grouped_data %}
                                 {% for item in group.items %}
                                 <tr>
@@ -71,10 +118,10 @@
                                     <i class="bi bi-inbox fs-1 d-block mb-2"></i>
                                     Нет данных за выбранный период
                                 </td>
-                            </tr>
+                            </table>
                             {% endfor %}
                         </tbody>
-                        <tfoot class="table-primary">
+                        <tfoot class="table-primary grand-total-row">
                             <tr>
                                 <th colspan="4" class="text-end">ВСЕГО:</th>
                                 <th class="text-end">{{ grand_total_initial }}</th>
@@ -90,14 +137,87 @@
     </div>
 </div>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <a href="{% url 'lumber_track:reports_page' %}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> Назад к отчетам
-        </a>
-        <a href="{% url url_name %}" class="btn btn-outline-primary">
-            <i class="bi bi-calendar-range"></i> Новый период
-        </a>
-    </div>
-</div>
+<script>
+    // Поиск по таблице
+    const searchInput = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('clearSearch');
+    const tableBody = document.getElementById('tableBody');
+    const rows = tableBody ? Array.from(tableBody.querySelectorAll('tr:not(#emptyRow)')) : [];
+    const emptyRow = document.getElementById('emptyRow');
+
+    if (searchInput) {
+        function filterTable() {
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            let hasVisibleRows = false;
+
+            rows.forEach(row => {
+                const rowText = row.innerText.toLowerCase();
+                if (searchTerm === '' || rowText.includes(searchTerm)) {
+                    row.style.display = '';
+                    hasVisibleRows = true;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            let noResultsRow = document.getElementById('noResultsRow');
+            if (searchTerm !== '' && !hasVisibleRows) {
+                if (!noResultsRow) {
+                    noResultsRow = document.createElement('tr');
+                    noResultsRow.id = 'noResultsRow';
+                    noResultsRow.innerHTML = '<td colspan="8" class="text-center text-muted py-4">🔍 Ничего не найдено<\/td>';
+                    tableBody.appendChild(noResultsRow);
+                }
+            } else if (noResultsRow) {
+                noResultsRow.remove();
+            }
+
+            if (emptyRow && rows.length === 0) {
+                emptyRow.style.display = searchTerm === '' ? '' : 'none';
+            }
+        }
+
+        searchInput.addEventListener('input', filterTable);
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterTable();
+                searchInput.focus();
+            });
+        }
+    }
+
+    // Печать отчета
+    const printBtn = document.getElementById('printBtn');
+    if (printBtn) {
+        printBtn.addEventListener('click', function() {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<!DOCTYPE html>');
+            printWindow.document.write('<html><head><meta charset="UTF-8">');
+            printWindow.document.write('<title>{{ title }} за период {{ date_from|date:"d.m.Y" }} - {{ date_to|date:"d.m.Y" }}</title>');
+
+            const links = document.querySelectorAll('link[rel="stylesheet"]');
+            links.forEach(link => {
+                printWindow.document.write(link.outerHTML);
+            });
+
+            printWindow.document.write('<style>');
+            printWindow.document.write('@media print { .btn, .d-flex.gap-2, .input-group, #printBtn, #searchInput, #clearSearch { display: none !important; } }');
+            printWindow.document.write('.grand-total-row { background-color: #f0ad4e !important; }');
+            printWindow.document.write('</style>');
+            printWindow.document.write('</head><body>');
+
+            const headerDiv = document.querySelector('.d-flex.justify-content-between .d-flex:first-child');
+            if (headerDiv) printWindow.document.write(headerDiv.cloneNode(true).outerHTML);
+
+            const table = document.querySelector('.table');
+            if (table) printWindow.document.write(table.outerHTML);
+
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.onload = function() { printWindow.print(); printWindow.close(); };
+        });
+    }
+</script>
 {% endblock %}

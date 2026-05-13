@@ -1020,60 +1020,125 @@ def report_income(request):
         date_to = request.GET.get('date_to')
         return redirect(f'/reports/income/result/?date_from={date_from}&date_to={date_to}')
     return render(request, 'lumber_track/report_form.html', {
-        'title': 'Отчет по поступлению',
+        'title': 'Отчет по поступлению от ЦСИ',
         'url_name': 'lumber_track:report_income_result'
     })
 
 
 def report_income_result(request):
+    """Результат отчета по поступлению с группировкой по дням"""
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
+
     if not date_from or not date_to:
         return redirect('lumber_track:report_income')
 
+    from datetime import datetime
+    from collections import defaultdict
+
+    date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+    date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+    # Получаем данные из приходных документов
     items = DocumentItem.objects.filter(
         document__doc_type=2,
-        document__doc_date__gte=date_from,
-        document__doc_date__lte=date_to
-    ).select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim')
+        document__doc_date__gte=date_from_obj,
+        document__doc_date__lte=date_to_obj
+    ).select_related('document', 'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim').order_by(
+        'document__doc_date')
 
-    report_data = {}
+    # Группировка по дням
+    daily_data = defaultdict(lambda: {
+        'items': [],
+        'total_quantity': 0,
+        'total_volume': 0,
+        'total_area': 0,
+    })
+
     for item in items:
+        doc_date = item.document.doc_date
+
+        # Агрегируем по товарам внутри дня
         key = f"{item.product_name_id}_{item.species_id}_{item.grade_id}_{item.lumber_dim_id}_{item.unit_dim_id}"
-        if key not in report_data:
-            report_data[key] = {
+
+        # Ищем существующий товар в этом дне
+        existing_item = None
+        for existing in daily_data[doc_date]['items']:
+            if existing.get('key') == key:
+                existing_item = existing
+                break
+
+        if existing_item:
+            existing_item['total_quantity'] += item.quantity
+            existing_item['total_volume'] += item.volume_m3
+            existing_item['total_area'] += item.area_m2
+        else:
+            daily_data[doc_date]['items'].append({
+                'key': key,
                 'product_name': item.product_name.name,
                 'species': item.species.name,
                 'grade': item.grade.code,
                 'dimension_display': item.dimension_display,
-                'total_quantity': 0,
-                'total_volume': 0,
-                'total_area': 0,
-            }
-        report_data[key]['total_quantity'] += item.quantity
-        report_data[key]['total_volume'] += item.volume_m3
-        report_data[key]['total_area'] += item.area_m2
+                'total_quantity': item.quantity,
+                'total_volume': item.volume_m3,
+                'total_area': item.area_m2,
+            })
 
-    report_list = sorted(report_data.values(), key=lambda x: x['product_name'])
-    total_quantity = sum(x['total_quantity'] for x in report_list)
-    total_volume = sum(x['total_volume'] for x in report_list)
-    total_area = sum(x['total_area'] for x in report_list)
+        # Суммируем итоги дня
+        daily_data[doc_date]['total_quantity'] += item.quantity
+        daily_data[doc_date]['total_volume'] += item.volume_m3
+        daily_data[doc_date]['total_area'] += item.area_m2
+
+    # Преобразуем в список для шаблона
+    report_data = []
+    for doc_date in sorted(daily_data.keys()):
+        # Заголовок даты
+        report_data.append({
+            'is_date_header': True,
+            'date': doc_date,
+        })
+        # Детальные строки
+        for item in daily_data[doc_date]['items']:
+            report_data.append({
+                'is_date_header': False,
+                'is_day_total': False,
+                'product_name': item['product_name'],
+                'species': item['species'],
+                'grade': item['grade'],
+                'dimension_display': item['dimension_display'],
+                'total_quantity': item['total_quantity'],
+                'total_volume': item['total_volume'],
+                'total_area': item['total_area'],
+            })
+        # Итоги за день
+        report_data.append({
+            'is_date_header': False,
+            'is_day_total': True,
+            'total_quantity': daily_data[doc_date]['total_quantity'],
+            'total_volume': daily_data[doc_date]['total_volume'],
+            'total_area': daily_data[doc_date]['total_area'],
+        })
+    # Общие итоги за весь период
+    grand_total_quantity = sum(item['total_quantity'] for item in report_data if not item.get('is_date_header'))
+    grand_total_volume = sum(item['total_volume'] for item in report_data if not item.get('is_date_header'))
+    grand_total_area = sum(item['total_area'] for item in report_data if not item.get('is_date_header'))
 
     context = {
         'title': 'Отчет по поступлению',
-        'date_from': datetime.strptime(date_from, '%Y-%m-%d'),
-        'date_to': datetime.strptime(date_to, '%Y-%m-%d'),
-        'report_data': report_list,
-        'total_quantity': total_quantity,
-        'total_volume': total_volume,
-        'total_area': total_area,
+        'date_from': date_from_obj,
+        'date_to': date_to_obj,
+        'report_data': report_data,
+        'grand_total_quantity': grand_total_quantity,
+        'grand_total_volume': grand_total_volume,
+        'grand_total_area': grand_total_area,
         'url_name': 'lumber_track:report_income_result',
     }
+
     if request.GET.get('export') == 'excel':
-        return export_to_excel(report_list, context['title'], date_from, date_to)
+        return export_income_to_excel(report_data, context['title'], date_from, date_to,
+                                      grand_total_quantity, grand_total_volume, grand_total_area)
+
     return render(request, 'lumber_track/report_result.html', context)
-
-
 def report_to_stock(request):
     if request.GET.get('date_from') and request.GET.get('date_to'):
         date_from = request.GET.get('date_from')
@@ -1086,55 +1151,124 @@ def report_to_stock(request):
 
 
 def report_to_stock_result(request):
+    """Результат отчета по продукции на склад с группировкой по дням"""
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
+
     if not date_from or not date_to:
         return redirect('lumber_track:report_to_stock')
 
-    items = DocumentItem.objects.filter(
-        document__doc_date__gte=date_from,
-        document__doc_date__lte=date_to
-    ).filter(
-        (models.Q(document__doc_type=2) & models.Q(document__location_id=2)) |
-        (models.Q(document__doc_type=3) & models.Q(document__to_location_id=2))
-    ).select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim')
+    from datetime import datetime
+    from collections import defaultdict
 
-    report_data = {}
+    date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+    date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+    # Получаем данные из расходных документов (doc_type=3, to_location=4 - розничный склад)
+    items = DocumentItem.objects.filter(
+        document__doc_type=3,
+        document__to_location_id=4,
+        document__doc_date__gte=date_from_obj,
+        document__doc_date__lte=date_to_obj
+    ).select_related('document', 'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim').order_by(
+        'document__doc_date')
+
+    # Группировка по дням
+    daily_data = defaultdict(lambda: {
+        'items': [],
+        'total_quantity': 0,
+        'total_volume': 0,
+        'total_area': 0,
+    })
+
     for item in items:
+        doc_date = item.document.doc_date
+
+        # Агрегируем по товарам внутри дня
         key = f"{item.product_name_id}_{item.species_id}_{item.grade_id}_{item.lumber_dim_id}_{item.unit_dim_id}"
-        if key not in report_data:
-            report_data[key] = {
+
+        # Ищем существующий товар в этом дне
+        existing_item = None
+        for existing in daily_data[doc_date]['items']:
+            if existing.get('key') == key:
+                existing_item = existing
+                break
+
+        if existing_item:
+            existing_item['total_quantity'] += item.quantity
+            existing_item['total_volume'] += item.volume_m3
+            existing_item['total_area'] += item.area_m2
+        else:
+            daily_data[doc_date]['items'].append({
+                'key': key,
                 'product_name': item.product_name.name,
                 'species': item.species.name,
                 'grade': item.grade.code,
                 'dimension_display': item.dimension_display,
-                'total_quantity': 0,
-                'total_volume': 0,
-                'total_area': 0,
-            }
-        report_data[key]['total_quantity'] += item.quantity
-        report_data[key]['total_volume'] += item.volume_m3
-        report_data[key]['total_area'] += item.area_m2
+                'total_quantity': item.quantity,
+                'total_volume': item.volume_m3,
+                'total_area': item.area_m2,
+            })
 
-    report_list = sorted(report_data.values(), key=lambda x: x['product_name'])
-    total_quantity = sum(x['total_quantity'] for x in report_list)
-    total_volume = sum(x['total_volume'] for x in report_list)
-    total_area = sum(x['total_area'] for x in report_list)
+        # Суммируем итоги дня
+        daily_data[doc_date]['total_quantity'] += item.quantity
+        daily_data[doc_date]['total_volume'] += item.volume_m3
+        daily_data[doc_date]['total_area'] += item.area_m2
+
+    # Преобразуем в список для шаблона
+    report_data = []
+    for doc_date in sorted(daily_data.keys()):
+        # Заголовок даты
+        report_data.append({
+            'is_date_header': True,
+            'date': doc_date,
+        })
+        # Детальные строки
+        for item in daily_data[doc_date]['items']:
+            report_data.append({
+                'is_date_header': False,
+                'is_day_total': False,
+                'product_name': item['product_name'],
+                'species': item['species'],
+                'grade': item['grade'],
+                'dimension_display': item['dimension_display'],
+                'total_quantity': item['total_quantity'],
+                'total_volume': item['total_volume'],
+                'total_area': item['total_area'],
+            })
+        # Итоги за день
+        report_data.append({
+            'is_date_header': False,
+            'is_day_total': True,
+            'total_quantity': daily_data[doc_date]['total_quantity'],
+            'total_volume': daily_data[doc_date]['total_volume'],
+            'total_area': daily_data[doc_date]['total_area'],
+        })
+
+    # Общие итоги за весь период
+    grand_total_quantity = sum(item['total_quantity'] for item in report_data if
+                               not item.get('is_date_header') and not item.get('is_day_total'))
+    grand_total_volume = sum(
+        item['total_volume'] for item in report_data if not item.get('is_date_header') and not item.get('is_day_total'))
+    grand_total_area = sum(
+        item['total_area'] for item in report_data if not item.get('is_date_header') and not item.get('is_day_total'))
 
     context = {
         'title': 'Отчет "На склад"',
-        'date_from': datetime.strptime(date_from, '%Y-%m-%d'),
-        'date_to': datetime.strptime(date_to, '%Y-%m-%d'),
-        'report_data': report_list,
-        'total_quantity': total_quantity,
-        'total_volume': total_volume,
-        'total_area': total_area,
+        'date_from': date_from_obj,
+        'date_to': date_to_obj,
+        'report_data': report_data,
+        'grand_total_quantity': grand_total_quantity,
+        'grand_total_volume': grand_total_volume,
+        'grand_total_area': grand_total_area,
         'url_name': 'lumber_track:report_to_stock_result',
     }
-    if request.GET.get('export') == 'excel':
-        return export_to_excel(report_list, context['title'], date_from, date_to)
-    return render(request, 'lumber_track/report_result.html', context)
 
+    if request.GET.get('export') == 'excel':
+        return export_to_stock_excel(report_data, context['title'], date_from, date_to,
+                                     grand_total_quantity, grand_total_volume, grand_total_area)
+
+    return render(request, 'lumber_track/report_result.html', context)
 
 def report_to_shop(request):
     if request.GET.get('date_from') and request.GET.get('date_to'):
@@ -1148,57 +1282,124 @@ def report_to_shop(request):
 
 
 def report_to_shop_result(request):
+    """Результат отчета по продукции в магазин с группировкой по дням"""
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
+
     if not date_from or not date_to:
         return redirect('lumber_track:report_to_shop')
 
+    from datetime import datetime
+    from collections import defaultdict
+
+    date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+    date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+    # Получаем данные из расходных документов (doc_type=3, to_location=3 - ТД Ангара)
     items = DocumentItem.objects.filter(
         document__doc_type=3,
-        document__doc_date__gte=date_from,
-        document__doc_date__lte=date_to
-    ).exclude(
-        document__to_location_id=2
-    ).exclude(
-        document__to_location__isnull=True
-    ).select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim')
+        document__to_location_id=3,
+        document__doc_date__gte=date_from_obj,
+        document__doc_date__lte=date_to_obj
+    ).select_related('document', 'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim').order_by(
+        'document__doc_date')
 
-    report_data = {}
+    # Группировка по дням
+    daily_data = defaultdict(lambda: {
+        'items': [],
+        'total_quantity': 0,
+        'total_volume': 0,
+        'total_area': 0,
+    })
+
     for item in items:
+        doc_date = item.document.doc_date
+
+        # Агрегируем по товарам внутри дня
         key = f"{item.product_name_id}_{item.species_id}_{item.grade_id}_{item.lumber_dim_id}_{item.unit_dim_id}"
-        if key not in report_data:
-            report_data[key] = {
+
+        # Ищем существующий товар в этом дне
+        existing_item = None
+        for existing in daily_data[doc_date]['items']:
+            if existing.get('key') == key:
+                existing_item = existing
+                break
+
+        if existing_item:
+            existing_item['total_quantity'] += item.quantity
+            existing_item['total_volume'] += item.volume_m3
+            existing_item['total_area'] += item.area_m2
+        else:
+            daily_data[doc_date]['items'].append({
+                'key': key,
                 'product_name': item.product_name.name,
                 'species': item.species.name,
                 'grade': item.grade.code,
                 'dimension_display': item.dimension_display,
-                'total_quantity': 0,
-                'total_volume': 0,
-                'total_area': 0,
-            }
-        report_data[key]['total_quantity'] += item.quantity
-        report_data[key]['total_volume'] += item.volume_m3
-        report_data[key]['total_area'] += item.area_m2
+                'total_quantity': item.quantity,
+                'total_volume': item.volume_m3,
+                'total_area': item.area_m2,
+            })
 
-    report_list = sorted(report_data.values(), key=lambda x: x['product_name'])
-    total_quantity = sum(x['total_quantity'] for x in report_list)
-    total_volume = sum(x['total_volume'] for x in report_list)
-    total_area = sum(x['total_area'] for x in report_list)
+        # Суммируем итоги дня
+        daily_data[doc_date]['total_quantity'] += item.quantity
+        daily_data[doc_date]['total_volume'] += item.volume_m3
+        daily_data[doc_date]['total_area'] += item.area_m2
+
+    # Преобразуем в список для шаблона
+    report_data = []
+    for doc_date in sorted(daily_data.keys()):
+        # Заголовок даты
+        report_data.append({
+            'is_date_header': True,
+            'date': doc_date,
+        })
+        # Детальные строки
+        for item in daily_data[doc_date]['items']:
+            report_data.append({
+                'is_date_header': False,
+                'is_day_total': False,
+                'product_name': item['product_name'],
+                'species': item['species'],
+                'grade': item['grade'],
+                'dimension_display': item['dimension_display'],
+                'total_quantity': item['total_quantity'],
+                'total_volume': item['total_volume'],
+                'total_area': item['total_area'],
+            })
+        # Итоги за день
+        report_data.append({
+            'is_date_header': False,
+            'is_day_total': True,
+            'total_quantity': daily_data[doc_date]['total_quantity'],
+            'total_volume': daily_data[doc_date]['total_volume'],
+            'total_area': daily_data[doc_date]['total_area'],
+        })
+
+    # Общие итоги за весь период
+    grand_total_quantity = sum(item['total_quantity'] for item in report_data if
+                               not item.get('is_date_header') and not item.get('is_day_total'))
+    grand_total_volume = sum(
+        item['total_volume'] for item in report_data if not item.get('is_date_header') and not item.get('is_day_total'))
+    grand_total_area = sum(
+        item['total_area'] for item in report_data if not item.get('is_date_header') and not item.get('is_day_total'))
 
     context = {
         'title': 'Отчет "В магазин"',
-        'date_from': datetime.strptime(date_from, '%Y-%m-%d'),
-        'date_to': datetime.strptime(date_to, '%Y-%m-%d'),
-        'report_data': report_list,
-        'total_quantity': total_quantity,
-        'total_volume': total_volume,
-        'total_area': total_area,
+        'date_from': date_from_obj,
+        'date_to': date_to_obj,
+        'report_data': report_data,
+        'grand_total_quantity': grand_total_quantity,
+        'grand_total_volume': grand_total_volume,
+        'grand_total_area': grand_total_area,
         'url_name': 'lumber_track:report_to_shop_result',
     }
-    if request.GET.get('export') == 'excel':
-        return export_to_excel(report_list, context['title'], date_from, date_to)
-    return render(request, 'lumber_track/report_result.html', context)
 
+    if request.GET.get('export') == 'excel':
+        return export_to_shop_excel(report_data, context['title'], date_from, date_to,
+                                    grand_total_quantity, grand_total_volume, grand_total_area)
+
+    return render(request, 'lumber_track/report_result.html', context)
 
 # lumber_track/views.py - добавьте после других функций отчетов
 
@@ -1484,10 +1685,14 @@ def report_category_result(request):
     date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
 
     # Получаем все уникальные позиции (наименование + размер)
+    # Получаем все уникальные позиции только для погонажа
     all_items = DocumentItem.objects.select_related(
         'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'
     ).filter(
-        document__doc_date__lte=date_to_obj
+        document__doc_date__lte=date_to_obj,
+        lumber_dim__isnull=False  # Только погонаж (есть lumber_dim)
+    ).exclude(
+        lumber_dim_id__isnull=True  # Исключаем штучные
     )
 
     # Собираем данные по каждой позиции
@@ -1521,6 +1726,7 @@ def report_category_result(request):
         if key not in report_data:
             report_data[key] = {
                 'product_name': item.product_name.name,
+                'species': item.species.name,
                 'thickness': thickness,
                 'width': width,
                 'length': length,
@@ -1557,14 +1763,14 @@ def report_category_result(request):
 
             grade_id = grade.id
 
-            # Остаток на начало
+            # 1. Остаток на начало
             initial_filter = Q(document__doc_date__lt=date_from_obj) & (
-                (Q(document__doc_type=1) & Q(document__location_id=2)) |
-                (Q(document__doc_type=2) & Q(document__location_id=2)) |
-                (Q(document__doc_type=3) & Q(document__to_location_id=2))
+                    (Q(document__doc_type=1) & Q(document__location_id=2)) |
+                    (Q(document__doc_type=2) & Q(document__location_id=2)) |
+                    (Q(document__doc_type=3) & Q(document__to_location_id=2))
             ) & Q(product_name__name=product_name, grade_id=grade_id)
 
-            # Поступление из цеха
+            # 2. Приход из цеха
             income_production_filter = Q(
                 document__doc_date__gte=date_from_obj,
                 document__doc_date__lte=date_to_obj,
@@ -1572,22 +1778,21 @@ def report_category_result(request):
                 document__location_id=2
             ) & Q(product_name__name=product_name, grade_id=grade_id)
 
-            # Передано на склад
+            # 3. Передано на склад (Розничный склад, id=4)
             to_stock_filter = Q(
                 document__doc_date__gte=date_from_obj,
-                document__doc_date__lte=date_to_obj
-            ) & (
-                (Q(document__doc_type=2) & Q(document__location_id=2)) |
-                (Q(document__doc_type=3) & Q(document__to_location_id=2))
+                document__doc_date__lte=date_to_obj,
+                document__doc_type=3,
+                document__to_location_id=4
             ) & Q(product_name__name=product_name, grade_id=grade_id)
 
-            # Передано в магазин
+            # 4. Передано в магазин (ТД Ангара, id=3)
             to_shop_filter = Q(
                 document__doc_date__gte=date_from_obj,
                 document__doc_date__lte=date_to_obj,
-                document__doc_type=3
-            ) & ~Q(document__to_location_id=2) & Q(product_name__name=product_name, grade_id=grade_id)
-
+                document__doc_type=3,
+                document__to_location_id=3
+            ) & Q(product_name__name=product_name, grade_id=grade_id)
             # Фильтрация по размерам
             if dimension_type == 'lumber' and dimension_id:
                 initial_filter &= Q(lumber_dim_id=dimension_id)
@@ -1639,10 +1844,10 @@ def report_category_result(request):
             data['to_shop_volume'][grade_code] = to_shop_qty * volume_per_unit
             data['to_shop_area'][grade_code] = to_shop_qty * area_per_unit
 
-            data['ending'][grade_code] = initial_qty + income_production_qty + to_stock_qty - to_shop_qty
-            data['ending_volume'][grade_code] = (initial_qty + income_production_qty + to_stock_qty - to_shop_qty) * volume_per_unit
-            data['ending_area'][grade_code] = (initial_qty + income_production_qty + to_stock_qty - to_shop_qty) * area_per_unit
-
+            # Исправленная формула: начальный + приход - склад - магазин
+            data['ending'][grade_code] = initial_qty + income_production_qty - to_stock_qty - to_shop_qty
+            data['ending_volume'][grade_code] = (initial_qty + income_production_qty - to_stock_qty - to_shop_qty) * volume_per_unit
+            data['ending_area'][grade_code] = (initial_qty + income_production_qty - to_stock_qty - to_shop_qty) * area_per_unit
     # Фильтруем позиции с данными
     report_list = []
     for key, data in report_data.items():
@@ -1661,12 +1866,19 @@ def report_category_result(request):
     report_list.sort(key=lambda x: x['product_name'])
 
     # Группировка по наименованию с итогами
-    grouped_data = {}
+    # Группировка по породе, а внутри по наименованию
+    grouped_by_species = {}
     for item in report_list:
-        name = item['product_name']
-        if name not in grouped_data:
-            grouped_data[name] = {
-                'product_name': name,
+        species = item['species']  # теперь это поле есть
+        product_name = item['product_name']
+
+        if species not in grouped_by_species:
+            grouped_by_species[species] = {}
+
+        if product_name not in grouped_by_species[species]:
+            grouped_by_species[species][product_name] = {
+                'product_name': product_name,
+                'species': species,
                 'items': [],
                 'total_initial': {cat: 0 for cat in categories},
                 'total_initial_volume': {cat: 0 for cat in categories},
@@ -1684,168 +1896,1259 @@ def report_category_result(request):
                 'total_ending_volume': {cat: 0 for cat in categories},
                 'total_ending_area': {cat: 0 for cat in categories},
             }
-        grouped_data[name]['items'].append(item)
-        for cat in categories:
-            grouped_data[name]['total_initial'][cat] += item['initial'][cat]
-            grouped_data[name]['total_initial_volume'][cat] += item['initial_volume'][cat]
-            grouped_data[name]['total_initial_area'][cat] += item['initial_area'][cat]
-            grouped_data[name]['total_income_production'][cat] += item['income_production'][cat]
-            grouped_data[name]['total_income_production_volume'][cat] += item['income_production_volume'][cat]
-            grouped_data[name]['total_income_production_area'][cat] += item['income_production_area'][cat]
-            grouped_data[name]['total_to_stock'][cat] += item['to_stock'][cat]
-            grouped_data[name]['total_to_stock_volume'][cat] += item['to_stock_volume'][cat]
-            grouped_data[name]['total_to_stock_area'][cat] += item['to_stock_area'][cat]
-            grouped_data[name]['total_to_shop'][cat] += item['to_shop'][cat]
-            grouped_data[name]['total_to_shop_volume'][cat] += item['to_shop_volume'][cat]
-            grouped_data[name]['total_to_shop_area'][cat] += item['to_shop_area'][cat]
-            grouped_data[name]['total_ending'][cat] += item['ending'][cat]
-            grouped_data[name]['total_ending_volume'][cat] += item['ending_volume'][cat]
-            grouped_data[name]['total_ending_area'][cat] += item['ending_area'][cat]
 
+        # Добавляем детальную запись
+        grouped_by_species[species][product_name]['items'].append(item)
+
+        for cat in categories:
+            grouped_by_species[species][product_name]['total_initial'][cat] += item['initial'][cat]
+            grouped_by_species[species][product_name]['total_initial_volume'][cat] += item['initial_volume'][cat]
+            grouped_by_species[species][product_name]['total_initial_area'][cat] += item['initial_area'][cat]
+            grouped_by_species[species][product_name]['total_income_production'][cat] += item['income_production'][cat]
+            grouped_by_species[species][product_name]['total_income_production_volume'][cat] += \
+            item['income_production_volume'][cat]
+            grouped_by_species[species][product_name]['total_income_production_area'][cat] += \
+            item['income_production_area'][cat]
+            grouped_by_species[species][product_name]['total_to_stock'][cat] += item['to_stock'][cat]
+            grouped_by_species[species][product_name]['total_to_stock_volume'][cat] += item['to_stock_volume'][cat]
+            grouped_by_species[species][product_name]['total_to_stock_area'][cat] += item['to_stock_area'][cat]
+            grouped_by_species[species][product_name]['total_to_shop'][cat] += item['to_shop'][cat]
+            grouped_by_species[species][product_name]['total_to_shop_volume'][cat] += item['to_shop_volume'][cat]
+            grouped_by_species[species][product_name]['total_to_shop_area'][cat] += item['to_shop_area'][cat]
+            grouped_by_species[species][product_name]['total_ending'][cat] += item['ending'][cat]
+            grouped_by_species[species][product_name]['total_ending_volume'][cat] += item['ending_volume'][cat]
+            grouped_by_species[species][product_name]['total_ending_area'][cat] += item['ending_area'][cat]
+    # Добавляем в контекст новую структуру
     context = {
         'title': 'Сводный отчет по категориям',
         'date_from': date_from_obj,
         'date_to': date_to_obj,
-        'grouped_data': grouped_data.values(),
+        'grouped_by_species': grouped_by_species,  # <-- проверьте, что здесь grouped_by_species
         'categories': categories,
         'url_name': 'lumber_track:report_category_result',
     }
 
     if request.GET.get('export') == 'excel':
-        return export_category_to_excel(grouped_data.values(), categories, context['title'], date_from, date_to)
+        return export_category_to_excel(grouped_by_species, categories, context['title'], date_from, date_to)
 
     return render(request, 'lumber_track/report_category.html', context)
-def export_category_to_excel(grouped_data, categories, title, date_from, date_to):
-    """Экспорт сводного отчета в Excel"""
+
+
+def export_category_to_excel(grouped_by_species, categories, title, date_from, date_to):
+    """Экспорт сводного отчета в Excel с группировкой по породам"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = title[:31]
+
+    # Стили
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    subheader_font = Font(bold=True, size=10)
+    subheader_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+    species_fill = PatternFill(start_color='E9ECEF', end_color='E9ECEF', fill_type='solid')
+    total_fill = PatternFill(start_color='D4EDDA', end_color='D4EDDA', fill_type='solid')
+
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # 1. Первая строка заголовков (основные секции)
+    headers_row1 = ['Наименование', 'Размер, мм']
+    sections = ['Остаток на начало', 'Поступление из цеха', 'Передано на склад', 'Передано в магазин',
+                'Остаток на конец']
+    for section in sections:
+        headers_row1.append(section)  # Временно, потом объединим
+
+    # Записываем первую строку
+    col = 1
+    ws.cell(row=1, column=col, value='Наименование')
+    ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
+    col += 1
+
+    ws.cell(row=1, column=col, value='Размер, мм')
+    ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col + 2)
+    col += 3
+
+    for section in sections:
+        ws.cell(row=1, column=col, value=section)
+        ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 11)
+        col += 12
+
+    # 2. Вторая строка заголовков (типы показателей)
+    col = 1
+    col += 4  # пропускаем наименование и размеры
+    for _ in range(5):  # 5 секций
+        ws.cell(row=2, column=col, value='Кол-во (шт)')
+        ws.merge_cells(start_row=2, start_column=col, end_row=2, end_column=col + 3)
+        col += 4
+        ws.cell(row=2, column=col, value='Объем (м³)')
+        ws.merge_cells(start_row=2, start_column=col, end_row=2, end_column=col + 3)
+        col += 4
+        ws.cell(row=2, column=col, value='Площадь (м²)')
+        ws.merge_cells(start_row=2, start_column=col, end_row=2, end_column=col + 3)
+        col += 4
+
+    # 3. Третья строка заголовков (категории A,B,C,D)
+    col = 5
+    for _ in range(15):  # 5 секций × 3 показателя = 15 групп по 4 категории
+        for cat in categories:
+            ws.cell(row=3, column=col, value=cat)
+            col += 1
+
+    # Оформление заголовков
+    for col in range(1, 65):
+        for row in range(1, 4):
+            cell = ws.cell(row=row, column=col)
+            if row == 1:
+                cell.font = header_font
+                cell.fill = header_fill
+            elif row == 2:
+                cell.font = subheader_font
+                cell.fill = subheader_fill
+            elif row == 3:
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    # 4. Данные
+    current_row = 4
+    for species, groups in grouped_by_species.items():
+        # Заголовок породы
+        cell = ws.cell(row=current_row, column=1, value=f"🌲 {species}")
+        cell.font = Font(bold=True, size=11)
+        cell.fill = species_fill
+        for col in range(1, 65):
+            ws.cell(row=current_row, column=col).border = thin_border
+        current_row += 1
+
+        for group in groups.values():
+            # Детальные строки
+            for item in group['items']:
+                # Размеры
+                ws.cell(row=current_row, column=1, value=item['product_name'])
+                ws.cell(row=current_row, column=2, value=item['thickness'] if item['thickness'] else '-')
+                ws.cell(row=current_row, column=3, value=item['width'] if item['width'] else '-')
+                ws.cell(row=current_row, column=4, value=item['length'] if item['length'] else '-')
+
+                col = 5
+                # Остаток на начало
+                for cat in categories:
+                    ws.cell(row=current_row, column=col,
+                            value=item['initial'][cat] if item['initial'][cat] != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['initial_volume'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['initial_area'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                    col += 1
+                # Поступление
+                for cat in categories:
+                    ws.cell(row=current_row, column=col,
+                            value=item['income_production'][cat] if item['income_production'][cat] != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['income_production_volume'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['income_production_area'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                    col += 1
+                # На склад
+                for cat in categories:
+                    ws.cell(row=current_row, column=col,
+                            value=item['to_stock'][cat] if item['to_stock'][cat] != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['to_stock_volume'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['to_stock_area'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                    col += 1
+                # В магазин
+                for cat in categories:
+                    ws.cell(row=current_row, column=col,
+                            value=item['to_shop'][cat] if item['to_shop'][cat] != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['to_shop_volume'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['to_shop_area'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                    col += 1
+                # Остаток на конец
+                for cat in categories:
+                    ws.cell(row=current_row, column=col, value=item['ending'][cat] if item['ending'][cat] != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['ending_volume'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                    col += 1
+                for cat in categories:
+                    val = item['ending_area'][cat]
+                    ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                    col += 1
+
+                # Применяем границы и выравнивание
+                for c in range(1, 65):
+                    cell = ws.cell(row=current_row, column=c)
+                    cell.border = thin_border
+                    if c >= 5:
+                        cell.alignment = Alignment(horizontal='right')
+                current_row += 1
+
+            # Итог по группе
+            grp = group
+            ws.cell(row=current_row, column=1, value=f"ИТОГО: {grp['product_name']} ({species})")
+            ws.cell(row=current_row, column=1).font = Font(bold=True)
+
+            col = 5
+            # Остаток на начало итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_initial'][cat] if grp['total_initial'][cat] != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_initial_volume'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_initial_area'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                col += 1
+            # Поступление итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_income_production'][cat] if grp['total_income_production'][cat] != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_income_production_volume'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_income_production_area'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                col += 1
+            # На склад итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_to_stock'][cat] if grp['total_to_stock'][cat] != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_to_stock_volume'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_to_stock_area'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                col += 1
+            # В магазин итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_to_shop'][cat] if grp['total_to_shop'][cat] != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_to_shop_volume'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_to_shop_area'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                col += 1
+            # Остаток на конец итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_ending'][cat] if grp['total_ending'][cat] != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_ending_volume'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 3) if val != 0 else '')
+                col += 1
+            for cat in categories:
+                val = grp['total_ending_area'][cat]
+                ws.cell(row=current_row, column=col, value=round(val, 2) if val != 0 else '')
+                col += 1
+
+            for c in range(1, 65):
+                cell = ws.cell(row=current_row, column=c)
+                cell.border = thin_border
+                cell.font = Font(bold=True)
+                cell.fill = total_fill
+                if c >= 5:
+                    cell.alignment = Alignment(horizontal='right')
+            current_row += 1
+
+    # Настройка ширины колонок
+    ws.column_dimensions['A'].width = 35
+    ws.column_dimensions['B'].width = 8
+    ws.column_dimensions['C'].width = 8
+    ws.column_dimensions['D'].width = 8
+    for col in range(5, 65):
+        ws.column_dimensions[get_column_letter(col)].width = 9
+
+    # Формируем ответ
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
+    wb.save(response)
+    return response
+
+def report_category_unit(request):
+    """Сводный отчет по категориям для штучных изделий"""
+    if request.GET.get('date_from') and request.GET.get('date_to'):
+        date_from = request.GET.get('date_from')
+        date_to = request.GET.get('date_to')
+        return redirect(f'/reports/category-unit/result/?date_from={date_from}&date_to={date_to}')
+
+    return render(request, 'lumber_track/report_form.html', {
+        'title': 'Сводный отчет по категориям (штучные)',
+        'url_name': 'lumber_track:report_category_unit_result'
+    })
+
+
+def report_category_unit_result(request):
+    """Результат сводного отчета по категориям для штучных изделий"""
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+
+    if not date_from or not date_to:
+        return redirect('lumber_track:report_category_unit')
+
+    from django.db.models import Sum, Q
+    from datetime import datetime
+
+    date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+    date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+    # Получаем все уникальные позиции ТОЛЬКО ДЛЯ ШТУЧНЫХ
+    all_items = DocumentItem.objects.select_related(
+        'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'
+    ).filter(
+        document__doc_date__lte=date_to_obj,
+        unit_dim__isnull=False  # Только штучные (есть unit_dim)
+    ).exclude(
+        unit_dim_id__isnull=True
+    )
+
+    # Собираем данные по каждой позиции
+    report_data = {}
+    categories = ['A', 'B', 'C', 'D']
+
+    for item in all_items:
+        # Для штучных - размеры из unit_dim
+        if item.unit_dim:
+            length = item.unit_dim.length
+            width = item.unit_dim.width
+            height = item.unit_dim.height
+            dimension_display = f"{length}×{width}×{height}"
+            dimension_type = 'unit'
+            dimension_id = item.unit_dim.id
+        else:
+            length = width = height = 0
+            dimension_display = "—"
+            dimension_type = None
+            dimension_id = None
+
+        key = f"{item.product_name_id}_{dimension_id}_{dimension_type}"
+
+        if key not in report_data:
+            report_data[key] = {
+                'product_name': item.product_name.name,
+                'species': item.species.name,
+                'length': length,
+                'width': width,
+                'height': height,
+                'dimension_display': dimension_display,
+                'dimension_type': dimension_type,
+                'dimension_id': dimension_id,
+                'initial': {cat: 0 for cat in categories},
+                'income_production': {cat: 0 for cat in categories},
+                'to_stock': {cat: 0 for cat in categories},
+                'to_shop': {cat: 0 for cat in categories},
+                'ending': {cat: 0 for cat in categories},
+            }
+
+    # Собираем данные по каждому ключу
+    for key, data in report_data.items():
+        product_name = data['product_name']
+        dimension_id = data['dimension_id']
+        dimension_type = data['dimension_type']
+
+        for grade_code in categories:
+            grade = QualityGrade.objects.filter(code=grade_code).first()
+            if not grade:
+                continue
+            grade_id = grade.id
+
+            # Остаток на начало
+            initial_filter = Q(document__doc_date__lt=date_from_obj) & (
+                    (Q(document__doc_type=1) & Q(document__location_id=2)) |
+                    (Q(document__doc_type=2) & Q(document__location_id=2)) |
+                    (Q(document__doc_type=3) & Q(document__to_location_id=2))
+            ) & Q(product_name__name=product_name, grade_id=grade_id)
+
+            # Приход из цеха
+            income_production_filter = Q(
+                document__doc_date__gte=date_from_obj,
+                document__doc_date__lte=date_to_obj,
+                document__doc_type=2,
+                document__location_id=2
+            ) & Q(product_name__name=product_name, grade_id=grade_id)
+
+            # Передано на склад (расходные, to_location=розничный склад id=4)
+            to_stock_filter = Q(
+                document__doc_date__gte=date_from_obj,
+                document__doc_date__lte=date_to_obj,
+                document__doc_type=3,
+                document__to_location_id=4
+            ) & Q(product_name__name=product_name, grade_id=grade_id)
+
+            # Передано в магазин (расходные, to_location=ТД Ангара id=3)
+            to_shop_filter = Q(
+                document__doc_date__gte=date_from_obj,
+                document__doc_date__lte=date_to_obj,
+                document__doc_type=3,
+                document__to_location_id=3
+            ) & Q(product_name__name=product_name, grade_id=grade_id)
+
+            # Фильтрация по размерам
+            if dimension_type == 'unit' and dimension_id:
+                initial_filter &= Q(unit_dim_id=dimension_id)
+                income_production_filter &= Q(unit_dim_id=dimension_id)
+                to_stock_filter &= Q(unit_dim_id=dimension_id)
+                to_shop_filter &= Q(unit_dim_id=dimension_id)
+
+            # Получаем суммы
+            initial_qty = DocumentItem.objects.filter(initial_filter).aggregate(total=Sum('quantity'))['total'] or 0
+            income_qty = DocumentItem.objects.filter(income_production_filter).aggregate(total=Sum('quantity'))[
+                             'total'] or 0
+            to_stock_qty = DocumentItem.objects.filter(to_stock_filter).aggregate(total=Sum('quantity'))['total'] or 0
+            to_shop_qty = DocumentItem.objects.filter(to_shop_filter).aggregate(total=Sum('quantity'))['total'] or 0
+
+            data['initial'][grade_code] = initial_qty
+            data['income_production'][grade_code] = income_qty
+            data['to_stock'][grade_code] = to_stock_qty
+            data['to_shop'][grade_code] = to_shop_qty
+            data['ending'][grade_code] = initial_qty + income_qty - to_stock_qty - to_shop_qty
+
+    # Фильтруем позиции с данными
+    report_list = []
+    for key, data in report_data.items():
+        has_data = False
+        for cat in categories:
+            if (data['initial'][cat] != 0 or
+                    data['income_production'][cat] != 0 or
+                    data['to_stock'][cat] != 0 or
+                    data['to_shop'][cat] != 0 or
+                    data['ending'][cat] != 0):
+                has_data = True
+                break
+        if has_data:
+            report_list.append(data)
+
+    if not report_list:
+        context = {
+            'title': 'Сводный отчет по категориям (штучные)',
+            'date_from': date_from_obj,
+            'date_to': date_to_obj,
+            'grouped_by_species': {},
+            'categories': categories,
+            'url_name': 'lumber_track:report_category_unit_result',
+        }
+        return render(request, 'lumber_track/report_category.html', context)
+
+    report_list.sort(key=lambda x: x['product_name'])
+
+    # Группировка по породе и наименованию
+    grouped_by_species = {}
+    for item in report_list:
+        species = item['species']
+        product_name = item['product_name']
+
+        if species not in grouped_by_species:
+            grouped_by_species[species] = {}
+
+        if product_name not in grouped_by_species[species]:
+            grouped_by_species[species][product_name] = {
+                'product_name': product_name,
+                'species': species,
+                'items': [],
+                'total_initial': {cat: 0 for cat in categories},
+                'total_income_production': {cat: 0 for cat in categories},
+                'total_to_stock': {cat: 0 for cat in categories},
+                'total_to_shop': {cat: 0 for cat in categories},
+                'total_ending': {cat: 0 for cat in categories},
+            }
+
+        grouped_by_species[species][product_name]['items'].append(item)
+
+        for cat in categories:
+            grouped_by_species[species][product_name]['total_initial'][cat] += item['initial'][cat]
+            grouped_by_species[species][product_name]['total_income_production'][cat] += item['income_production'][cat]
+            grouped_by_species[species][product_name]['total_to_stock'][cat] += item['to_stock'][cat]
+            grouped_by_species[species][product_name]['total_to_shop'][cat] += item['to_shop'][cat]
+            grouped_by_species[species][product_name]['total_ending'][cat] += item['ending'][cat]
+
+    context = {
+        'title': 'Сводный отчет по категориям (штучные)',
+        'date_from': date_from_obj,
+        'date_to': date_to_obj,
+        'grouped_by_species': grouped_by_species,
+        'categories': categories,
+        'url_name': 'lumber_track:report_category_unit_result',
+    }
+
+    if request.GET.get('export') == 'excel':
+        return export_category_unit_to_excel(grouped_by_species, categories, context['title'], date_from, date_to)
+
+    return render(request, 'lumber_track/report_category.html', context)
+
+
+def export_category_unit_to_excel(grouped_by_species, categories, title, date_from, date_to):
+    """Экспорт сводного отчета для штучных изделий в Excel"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = title[:31]
+
+    # Стили
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    subheader_font = Font(bold=True, size=10)
+    subheader_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+    species_fill = PatternFill(start_color='E9ECEF', end_color='E9ECEF', fill_type='solid')
+    total_fill = PatternFill(start_color='D4EDDA', end_color='D4EDDA', fill_type='solid')
+
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # 1. Первая строка заголовков (основные секции)
+    col = 1
+    ws.cell(row=1, column=col, value='Наименование')
+    ws.merge_cells(start_row=1, start_column=col, end_row=3, end_column=col)
+    col += 1
+
+    ws.cell(row=1, column=col, value='Размер, мм')
+    ws.merge_cells(start_row=1, start_column=col, end_row=3, end_column=col + 2)
+    col += 3
+
+    sections = ['Остаток на начало', 'Поступление из цеха', 'Передано на склад', 'Передано в магазин',
+                'Остаток на конец']
+    for section in sections:
+        ws.cell(row=1, column=col, value=section)
+        ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 3)
+        col += 4
+
+    # 2. Вторая строка заголовков (показатели)
+    col = 5
+    for _ in range(5):
+        ws.cell(row=2, column=col, value='Кол-во (шт)')
+        ws.merge_cells(start_row=2, start_column=col, end_row=2, end_column=col + 3)
+        col += 4
+
+    # 3. Третья строка заголовков (категории)
+    col = 5
+    for _ in range(5):
+        for cat in categories:
+            ws.cell(row=3, column=col, value=cat)
+            col += 1
+
+    # Оформление заголовков
+    for row in range(1, 4):
+        for col in range(1, 4 + 5 * 4):
+            cell = ws.cell(row=row, column=col)
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            if row == 1:
+                cell.font = header_font
+                cell.fill = header_fill
+            elif row == 2:
+                cell.font = subheader_font
+                cell.fill = subheader_fill
+            else:
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
+
+    # 4. Данные
+    current_row = 4
+    for species, groups in grouped_by_species.items():
+        # Заголовок породы
+        cell = ws.cell(row=current_row, column=1, value=f"🌲 {species}")
+        cell.font = Font(bold=True, size=11)
+        cell.fill = species_fill
+        for col in range(1, 4 + 5 * 4):
+            ws.cell(row=current_row, column=col).border = thin_border
+        current_row += 1
+
+        for group in groups.values():
+            # Детальные строки
+            for item in group['items']:
+                ws.cell(row=current_row, column=1, value=item['product_name'])
+                ws.cell(row=current_row, column=2, value=item['length'] if item['length'] else '-')
+                ws.cell(row=current_row, column=3, value=item['width'] if item['width'] else '-')
+                ws.cell(row=current_row, column=4, value=item['height'] if item['height'] else '-')
+
+                col = 5
+                # Остаток на начало
+                for cat in categories:
+                    ws.cell(row=current_row, column=col,
+                            value=item['initial'][cat] if item['initial'][cat] != 0 else '')
+                    col += 1
+                # Поступление
+                for cat in categories:
+                    ws.cell(row=current_row, column=col,
+                            value=item['income_production'][cat] if item['income_production'][cat] != 0 else '')
+                    col += 1
+                # На склад
+                for cat in categories:
+                    ws.cell(row=current_row, column=col,
+                            value=item['to_stock'][cat] if item['to_stock'][cat] != 0 else '')
+                    col += 1
+                # В магазин
+                for cat in categories:
+                    ws.cell(row=current_row, column=col,
+                            value=item['to_shop'][cat] if item['to_shop'][cat] != 0 else '')
+                    col += 1
+                # Остаток на конец
+                for cat in categories:
+                    ws.cell(row=current_row, column=col, value=item['ending'][cat] if item['ending'][cat] != 0 else '')
+                    col += 1
+
+                # Границы и выравнивание
+                for c in range(1, 4 + 5 * 4):
+                    cell = ws.cell(row=current_row, column=c)
+                    cell.border = thin_border
+                    if c >= 5:
+                        cell.alignment = Alignment(horizontal='right')
+                current_row += 1
+
+            # Итог по группе
+            grp = group
+            ws.cell(row=current_row, column=1, value=f"ИТОГО: {grp['product_name']} ({species})")
+            ws.cell(row=current_row, column=1).font = Font(bold=True)
+
+            col = 5
+            # Остаток на начало итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_initial'][cat] if grp['total_initial'][cat] != 0 else '')
+                col += 1
+            # Поступление итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_income_production'][cat] if grp['total_income_production'][cat] != 0 else '')
+                col += 1
+            # На склад итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_to_stock'][cat] if grp['total_to_stock'][cat] != 0 else '')
+                col += 1
+            # В магазин итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_to_shop'][cat] if grp['total_to_shop'][cat] != 0 else '')
+                col += 1
+            # Остаток на конец итого
+            for cat in categories:
+                ws.cell(row=current_row, column=col,
+                        value=grp['total_ending'][cat] if grp['total_ending'][cat] != 0 else '')
+                col += 1
+
+            for c in range(1, 4 + 5 * 4):
+                cell = ws.cell(row=current_row, column=c)
+                cell.border = thin_border
+                cell.font = Font(bold=True)
+                cell.fill = total_fill
+                if c >= 5:
+                    cell.alignment = Alignment(horizontal='right')
+            current_row += 1
+
+    # Настройка ширины колонок
+    ws.column_dimensions['A'].width = 35
+    ws.column_dimensions['B'].width = 10
+    ws.column_dimensions['C'].width = 10
+    ws.column_dimensions['D'].width = 10
+    for col in range(5, 4 + 5 * 4):
+        ws.column_dimensions[get_column_letter(col)].width = 12
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
+    wb.save(response)
+    return response
+
+# lumber_track/views.py
+
+def report_detailed(request):
+    """Детальный отчет по документам (разбивка по дням)"""
+    if request.GET.get('date_from') and request.GET.get('date_to'):
+        date_from = request.GET.get('date_from')
+        date_to = request.GET.get('date_to')
+        return redirect(f'/reports/detailed/result/?date_from={date_from}&date_to={date_to}')
+
+    return render(request, 'lumber_track/report_form.html', {
+        'title': 'Детальный отчет по дням',
+        'url_name': 'lumber_track:report_detailed_result'
+    })
+
+
+def report_detailed_result(request):
+    """Результат детального отчета по дням"""
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+
+    if not date_from or not date_to:
+        return redirect('lumber_track:report_detailed')
+
+    from datetime import datetime
+
+    date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+    date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+    # Получаем все позиции из документов за период с сортировкой по дате
+    items = DocumentItem.objects.filter(
+        document__doc_date__gte=date_from_obj,
+        document__doc_date__lte=date_to_obj
+    ).select_related(
+        'document', 'product_name', 'species', 'grade', 'lumber_dim', 'unit_dim'
+    ).order_by('document__doc_date', 'document__doc_number')
+
+    report_data = []
+    for item in items:
+        doc = item.document
+        doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc.doc_type, '')
+
+        # Получаем размер
+        if item.lumber_dim:
+            dimension_display = f"{item.lumber_dim.thickness}-{item.lumber_dim.width}-{item.lumber_dim.length} мм"
+        elif item.unit_dim:
+            dimension_display = f"{item.unit_dim.length}-{item.unit_dim.width}-{item.unit_dim.height} мм"
+        else:
+            dimension_display = "—"
+
+        report_data.append({
+            'doc_date': doc.doc_date,
+            'doc_number': doc.doc_number,
+            'doc_type': doc_type_name,
+            'product_name': item.product_name.name,
+            'species': item.species.name,
+            'grade': item.grade.code,
+            'dimension_display': dimension_display,
+            'quantity': item.quantity,
+            'volume': item.volume_m3,
+            'area': item.area_m2,
+        })
+
+    # Подсчет итогов
+    total_quantity = sum(item['quantity'] for item in report_data)
+    total_volume = sum(item['volume'] for item in report_data)
+    total_area = sum(item['area'] for item in report_data)
+
+    context = {
+        'title': 'Детальный отчет по дням',
+        'date_from': date_from_obj,
+        'date_to': date_to_obj,
+        'report_data': report_data,
+        'total_quantity': total_quantity,
+        'total_volume': total_volume,
+        'total_area': total_area,
+        'url_name': 'lumber_track:report_detailed_result',
+    }
+
+    if request.GET.get('export') == 'excel':
+        return export_detailed_to_excel(report_data, context['title'], date_from, date_to,
+                                        total_quantity, total_volume, total_area)
+
+    return render(request, 'lumber_track/report_detailed.html', context)
+
+
+def export_detailed_to_excel(report_data, title, date_from, date_to,
+                             total_quantity, total_volume, total_area):
+    """Экспорт детального отчета в Excel"""
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Сводный отчет"
+    ws.title = "Детальный отчет"
 
     # Стили
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-    subheader_font = Font(bold=True)
-    subheader_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
-    total_fill = PatternFill(start_color='E0E0E0', end_color='E0E0E0', fill_type='solid')
 
     # Заголовки
-    col = 1
-    ws.cell(row=1, column=col, value="Наименование")
-    ws.cell(row=2, column=col, value="Размер, мм")
-    col += 1
+    headers = ['Дата', '№ документа', 'Тип документа', 'Наименование', 'Порода',
+               'Категория', 'Размер', 'Количество (шт)', 'Объем (м³)', 'Площадь (м²)']
 
-    # Размеры (толщина, ширина, длина)
-    ws.cell(row=1, column=col, value="Размер, мм")
-    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 2)
-    ws.cell(row=2, column=col, value="Толщина")
-    ws.cell(row=2, column=col + 1, value="Ширина")
-    ws.cell(row=2, column=col + 2, value="Длина")
-    col += 3
-
-    # Остаток на начало периода
-    ws.cell(row=1, column=col, value="Остаток на начало периода")
-    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
-    for i, cat in enumerate(categories):
-        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
-    col += len(categories)
-
-    # Поступление из цеха
-    ws.cell(row=1, column=col, value="Поступление из цеха")
-    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
-    for i, cat in enumerate(categories):
-        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
-    col += len(categories)
-
-    # Передано на склад
-    ws.cell(row=1, column=col, value="Передано на склад")
-    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
-    for i, cat in enumerate(categories):
-        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
-    col += len(categories)
-
-    # Передано в магазин
-    ws.cell(row=1, column=col, value="Передано в магазин")
-    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
-    for i, cat in enumerate(categories):
-        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
-    col += len(categories)
-
-    # Остаток на конец периода
-    ws.cell(row=1, column=col, value="Остаток на конец периода")
-    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + len(categories) - 1)
-    for i, cat in enumerate(categories):
-        ws.cell(row=2, column=col + i, value=f"Кат. {cat}")
-
-    # Оформление заголовков
-    for col in range(1, ws.max_column + 1):
-        cell1 = ws.cell(row=1, column=col)
-        cell1.font = header_font
-        cell1.alignment = Alignment(horizontal='center', vertical='center')
-        cell1.fill = header_fill
-        cell2 = ws.cell(row=2, column=col)
-        cell2.font = subheader_font
-        cell2.alignment = Alignment(horizontal='center', vertical='center')
-        cell2.fill = subheader_fill
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+        cell.fill = header_fill
 
     # Данные
-    row = 3
-    for group in grouped_data:
-        for item in group['items']:
-            ws.cell(row=row, column=1, value=item['product_name'])
-            ws.cell(row=row, column=2, value=item['thickness'] if item['thickness'] else "")
-            ws.cell(row=row, column=3, value=item['width'] if item['width'] else "")
-            ws.cell(row=row, column=4, value=item['length'] if item['length'] else "")
-
-            col = 5
-            for cat in categories:
-                ws.cell(row=row, column=col, value=float(item['initial'][cat]))
-                col += 1
-            for cat in categories:
-                ws.cell(row=row, column=col, value=float(item['income_production'][cat]))
-                col += 1
-            for cat in categories:
-                ws.cell(row=row, column=col, value=float(item['to_stock'][cat]))
-                col += 1
-            for cat in categories:
-                ws.cell(row=row, column=col, value=float(item['to_shop'][cat]))
-                col += 1
-            for cat in categories:
-                ending = item['initial'][cat] + item['income_production'][cat] - item['to_shop'][cat]
-                ws.cell(row=row, column=col, value=float(ending))
-                col += 1
-            row += 1
-
-        # Итоги по группе
-        ws.row_dimensions[row].fill = total_fill
-        ws.cell(row=row, column=1, value=f"Итого: {group['product_name']}")
-        ws.cell(row=row, column=1).font = Font(bold=True)
-        col = 5
-        for cat in categories:
-            ws.cell(row=row, column=col, value=float(group['total_initial'][cat]))
-            col += 1
-        for cat in categories:
-            ws.cell(row=row, column=col, value=float(group['total_income_production'][cat]))
-            col += 1
-        for cat in categories:
-            ws.cell(row=row, column=col, value=float(group['total_to_stock'][cat]))
-            col += 1
-        for cat in categories:
-            ws.cell(row=row, column=col, value=float(group['total_to_shop'][cat]))
-            col += 1
-        for cat in categories:
-            ending = group['total_initial'][cat] + group['total_income_production'][cat] - group['total_to_shop'][cat]
-            ws.cell(row=row, column=col, value=float(ending))
-            col += 1
-        row += 1
+    for row, item in enumerate(report_data, 2):
+        ws.cell(row=row, column=1, value=item['doc_date'].strftime('%d.%m.%Y'))
+        ws.cell(row=row, column=2, value=item['doc_number'])
+        ws.cell(row=row, column=3, value=item['doc_type'])
+        ws.cell(row=row, column=4, value=item['product_name'])
+        ws.cell(row=row, column=5, value=item['species'])
+        ws.cell(row=row, column=6, value=item['grade'])
+        ws.cell(row=row, column=7, value=item['dimension_display'])
+        ws.cell(row=row, column=8, value=float(item['quantity']))
+        ws.cell(row=row, column=9, value=float(item['volume']))
+        ws.cell(row=row, column=10, value=float(item['area']))
 
     # Настройка ширины колонок
-    ws.column_dimensions['A'].width = 30
-    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 20
+    ws.column_dimensions['D'].width = 30
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 10
+    ws.column_dimensions['G'].width = 20
+    ws.column_dimensions['H'].width = 15
+    ws.column_dimensions['I'].width = 15
+    ws.column_dimensions['J'].width = 15
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
+    wb.save(response)
+    return response
+
+
+def export_income_to_excel(report_data, title, date_from, date_to, grand_total_quantity, grand_total_volume,
+                           grand_total_area):
+    """Экспорт отчета в Excel с группировкой по дням"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = title[:31]  # Excel ограничение на длину имени листа
+
+    # Стили
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    date_header_fill = PatternFill(start_color='E9ECEF', end_color='E9ECEF', fill_type='solid')
+    date_header_font = Font(bold=True, size=11)
+    day_total_fill = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
+    day_total_font = Font(bold=True)
+    total_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+    total_font = Font(bold=True)
+
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # Заголовки
+    headers = ['Наименование', 'Порода', 'Категория', 'Размер', 'Количество (шт)', 'Объем (м³)', 'Площадь (м²)']
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.fill = header_fill
+        cell.border = thin_border
+
+    current_row = 2
+
+    for item in report_data:
+        if item.get('is_date_header'):
+            # Заголовок даты
+            cell = ws.cell(row=current_row, column=1, value=f"📅 {item['date'].strftime('%d.%m.%Y')}")
+            cell.font = date_header_font
+            cell.fill = date_header_fill
+            cell.border = thin_border
+            # Объединяем ячейки для заголовка даты
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=7)
+            current_row += 1
+
+        elif item.get('is_day_total'):
+            # Итоги за день
+            ws.cell(row=current_row, column=1, value="Итого за день:")
+            ws.cell(row=current_row, column=1).font = day_total_font
+            ws.cell(row=current_row, column=1).fill = day_total_fill
+            ws.cell(row=current_row, column=1).border = thin_border
+            ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=5, value=float(item['total_quantity']))
+            ws.cell(row=current_row, column=5).font = day_total_font
+            ws.cell(row=current_row, column=5).fill = day_total_fill
+            ws.cell(row=current_row, column=5).border = thin_border
+            ws.cell(row=current_row, column=5).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=6, value=float(item['total_volume']))
+            ws.cell(row=current_row, column=6).font = day_total_font
+            ws.cell(row=current_row, column=6).fill = day_total_fill
+            ws.cell(row=current_row, column=6).border = thin_border
+            ws.cell(row=current_row, column=6).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=7, value=float(item['total_area']))
+            ws.cell(row=current_row, column=7).font = day_total_font
+            ws.cell(row=current_row, column=7).fill = day_total_fill
+            ws.cell(row=current_row, column=7).border = thin_border
+            ws.cell(row=current_row, column=7).alignment = Alignment(horizontal='right')
+
+            # Объединяем ячейки для первых 4 колонок
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+            current_row += 1
+
+        else:
+            # Детальные строки
+            ws.cell(row=current_row, column=1, value=item['product_name'])
+            ws.cell(row=current_row, column=2, value=item['species'])
+            ws.cell(row=current_row, column=3, value=item['grade'])
+            ws.cell(row=current_row, column=4, value=item['dimension_display'])
+            ws.cell(row=current_row, column=5, value=float(item['total_quantity']))
+            ws.cell(row=current_row, column=6, value=float(item['total_volume']))
+            ws.cell(row=current_row, column=7, value=float(item['total_area']))
+
+            for col in range(1, 8):
+                cell = ws.cell(row=current_row, column=col)
+                cell.border = thin_border
+                if col >= 5:
+                    cell.alignment = Alignment(horizontal='right')
+                else:
+                    cell.alignment = Alignment(horizontal='left')
+            current_row += 1
+
+    # Общие итоги
+    ws.cell(row=current_row, column=1, value="ВСЕГО за период:")
+    ws.cell(row=current_row, column=1).font = total_font
+    ws.cell(row=current_row, column=1).fill = total_fill
+    ws.cell(row=current_row, column=1).border = thin_border
+    ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=5, value=float(grand_total_quantity))
+    ws.cell(row=current_row, column=5).font = total_font
+    ws.cell(row=current_row, column=5).fill = total_fill
+    ws.cell(row=current_row, column=5).border = thin_border
+    ws.cell(row=current_row, column=5).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=6, value=float(grand_total_volume))
+    ws.cell(row=current_row, column=6).font = total_font
+    ws.cell(row=current_row, column=6).fill = total_fill
+    ws.cell(row=current_row, column=6).border = thin_border
+    ws.cell(row=current_row, column=6).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=7, value=float(grand_total_area))
+    ws.cell(row=current_row, column=7).font = total_font
+    ws.cell(row=current_row, column=7).fill = total_fill
+    ws.cell(row=current_row, column=7).border = thin_border
+    ws.cell(row=current_row, column=7).alignment = Alignment(horizontal='right')
+
+    # Объединяем ячейки для итогов (первые 4 колонки)
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+
+    # Настройка ширины колонок
+    ws.column_dimensions['A'].width = 35
+    ws.column_dimensions['B'].width = 15
     ws.column_dimensions['C'].width = 12
-    ws.column_dimensions['D'].width = 12
+    ws.column_dimensions['D'].width = 25
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 15
+
+    # Формируем ответ
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
+    wb.save(response)
+    return response
+
+
+def export_to_shop_excel(report_data, title, date_from, date_to, grand_total_quantity, grand_total_volume,
+                         grand_total_area):
+    """Экспорт отчета 'В магазин' в Excel с группировкой по дням"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = title[:31]
+
+    # Стили (аналогично экспорту для поступления)
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    date_header_fill = PatternFill(start_color='E9ECEF', end_color='E9ECEF', fill_type='solid')
+    date_header_font = Font(bold=True, size=11)
+    day_total_fill = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
+    day_total_font = Font(bold=True)
+    total_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+    total_font = Font(bold=True)
+
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # Заголовки
+    headers = ['Наименование', 'Порода', 'Категория', 'Размер', 'Количество (шт)', 'Объем (м³)', 'Площадь (м²)']
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.fill = header_fill
+        cell.border = thin_border
+
+    current_row = 2
+
+    for item in report_data:
+        if item.get('is_date_header'):
+            cell = ws.cell(row=current_row, column=1, value=f"📅 {item['date'].strftime('%d.%m.%Y')}")
+            cell.font = date_header_font
+            cell.fill = date_header_fill
+            cell.border = thin_border
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=7)
+            current_row += 1
+
+        elif item.get('is_day_total'):
+            ws.cell(row=current_row, column=1, value="Итого за день:")
+            ws.cell(row=current_row, column=1).font = day_total_font
+            ws.cell(row=current_row, column=1).fill = day_total_fill
+            ws.cell(row=current_row, column=1).border = thin_border
+            ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=5, value=float(item['total_quantity']))
+            ws.cell(row=current_row, column=5).font = day_total_font
+            ws.cell(row=current_row, column=5).fill = day_total_fill
+            ws.cell(row=current_row, column=5).border = thin_border
+            ws.cell(row=current_row, column=5).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=6, value=float(item['total_volume']))
+            ws.cell(row=current_row, column=6).font = day_total_font
+            ws.cell(row=current_row, column=6).fill = day_total_fill
+            ws.cell(row=current_row, column=6).border = thin_border
+            ws.cell(row=current_row, column=6).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=7, value=float(item['total_area']))
+            ws.cell(row=current_row, column=7).font = day_total_font
+            ws.cell(row=current_row, column=7).fill = day_total_fill
+            ws.cell(row=current_row, column=7).border = thin_border
+            ws.cell(row=current_row, column=7).alignment = Alignment(horizontal='right')
+
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+            current_row += 1
+
+        else:
+            ws.cell(row=current_row, column=1, value=item['product_name'])
+            ws.cell(row=current_row, column=2, value=item['species'])
+            ws.cell(row=current_row, column=3, value=item['grade'])
+            ws.cell(row=current_row, column=4, value=item['dimension_display'])
+            ws.cell(row=current_row, column=5, value=float(item['total_quantity']))
+            ws.cell(row=current_row, column=6, value=float(item['total_volume']))
+            ws.cell(row=current_row, column=7, value=float(item['total_area']))
+
+            for col in range(1, 8):
+                cell = ws.cell(row=current_row, column=col)
+                cell.border = thin_border
+                if col >= 5:
+                    cell.alignment = Alignment(horizontal='right')
+            current_row += 1
+
+    # Общие итоги
+    ws.cell(row=current_row, column=1, value="ВСЕГО за период:")
+    ws.cell(row=current_row, column=1).font = total_font
+    ws.cell(row=current_row, column=1).fill = total_fill
+    ws.cell(row=current_row, column=1).border = thin_border
+    ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=5, value=float(grand_total_quantity))
+    ws.cell(row=current_row, column=5).font = total_font
+    ws.cell(row=current_row, column=5).fill = total_fill
+    ws.cell(row=current_row, column=5).border = thin_border
+    ws.cell(row=current_row, column=5).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=6, value=float(grand_total_volume))
+    ws.cell(row=current_row, column=6).font = total_font
+    ws.cell(row=current_row, column=6).fill = total_fill
+    ws.cell(row=current_row, column=6).border = thin_border
+    ws.cell(row=current_row, column=6).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=7, value=float(grand_total_area))
+    ws.cell(row=current_row, column=7).font = total_font
+    ws.cell(row=current_row, column=7).fill = total_fill
+    ws.cell(row=current_row, column=7).border = thin_border
+    ws.cell(row=current_row, column=7).alignment = Alignment(horizontal='right')
+
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+
+    # Настройка ширины колонок
+    ws.column_dimensions['A'].width = 35
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 25
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 15
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
+    wb.save(response)
+    return response
+
+
+def export_to_stock_excel(report_data, title, date_from, date_to, grand_total_quantity, grand_total_volume,
+                          grand_total_area):
+    """Экспорт отчета 'На склад' в Excel с группировкой по дням"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = title[:31]
+
+    # Стили
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    date_header_fill = PatternFill(start_color='E9ECEF', end_color='E9ECEF', fill_type='solid')
+    date_header_font = Font(bold=True, size=11)
+    day_total_fill = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
+    day_total_font = Font(bold=True)
+    total_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+    total_font = Font(bold=True)
+
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # Заголовки
+    headers = ['Наименование', 'Порода', 'Категория', 'Размер', 'Количество (шт)', 'Объем (м³)', 'Площадь (м²)']
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.fill = header_fill
+        cell.border = thin_border
+
+    current_row = 2
+
+    for item in report_data:
+        if item.get('is_date_header'):
+            cell = ws.cell(row=current_row, column=1, value=f"📅 {item['date'].strftime('%d.%m.%Y')}")
+            cell.font = date_header_font
+            cell.fill = date_header_fill
+            cell.border = thin_border
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=7)
+            current_row += 1
+
+        elif item.get('is_day_total'):
+            ws.cell(row=current_row, column=1, value="Итого за день:")
+            ws.cell(row=current_row, column=1).font = day_total_font
+            ws.cell(row=current_row, column=1).fill = day_total_fill
+            ws.cell(row=current_row, column=1).border = thin_border
+            ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=5, value=float(item['total_quantity']))
+            ws.cell(row=current_row, column=5).font = day_total_font
+            ws.cell(row=current_row, column=5).fill = day_total_fill
+            ws.cell(row=current_row, column=5).border = thin_border
+            ws.cell(row=current_row, column=5).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=6, value=float(item['total_volume']))
+            ws.cell(row=current_row, column=6).font = day_total_font
+            ws.cell(row=current_row, column=6).fill = day_total_fill
+            ws.cell(row=current_row, column=6).border = thin_border
+            ws.cell(row=current_row, column=6).alignment = Alignment(horizontal='right')
+
+            ws.cell(row=current_row, column=7, value=float(item['total_area']))
+            ws.cell(row=current_row, column=7).font = day_total_font
+            ws.cell(row=current_row, column=7).fill = day_total_fill
+            ws.cell(row=current_row, column=7).border = thin_border
+            ws.cell(row=current_row, column=7).alignment = Alignment(horizontal='right')
+
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+            current_row += 1
+
+        else:
+            ws.cell(row=current_row, column=1, value=item['product_name'])
+            ws.cell(row=current_row, column=2, value=item['species'])
+            ws.cell(row=current_row, column=3, value=item['grade'])
+            ws.cell(row=current_row, column=4, value=item['dimension_display'])
+            ws.cell(row=current_row, column=5, value=float(item['total_quantity']))
+            ws.cell(row=current_row, column=6, value=float(item['total_volume']))
+            ws.cell(row=current_row, column=7, value=float(item['total_area']))
+
+            for col in range(1, 8):
+                cell = ws.cell(row=current_row, column=col)
+                cell.border = thin_border
+                if col >= 5:
+                    cell.alignment = Alignment(horizontal='right')
+            current_row += 1
+
+    # Общие итоги
+    ws.cell(row=current_row, column=1, value="ВСЕГО за период:")
+    ws.cell(row=current_row, column=1).font = total_font
+    ws.cell(row=current_row, column=1).fill = total_fill
+    ws.cell(row=current_row, column=1).border = thin_border
+    ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=5, value=float(grand_total_quantity))
+    ws.cell(row=current_row, column=5).font = total_font
+    ws.cell(row=current_row, column=5).fill = total_fill
+    ws.cell(row=current_row, column=5).border = thin_border
+    ws.cell(row=current_row, column=5).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=6, value=float(grand_total_volume))
+    ws.cell(row=current_row, column=6).font = total_font
+    ws.cell(row=current_row, column=6).fill = total_fill
+    ws.cell(row=current_row, column=6).border = thin_border
+    ws.cell(row=current_row, column=6).alignment = Alignment(horizontal='right')
+
+    ws.cell(row=current_row, column=7, value=float(grand_total_area))
+    ws.cell(row=current_row, column=7).font = total_font
+    ws.cell(row=current_row, column=7).fill = total_fill
+    ws.cell(row=current_row, column=7).border = thin_border
+    ws.cell(row=current_row, column=7).alignment = Alignment(horizontal='right')
+
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+
+    # Настройка ширины колонок
+    ws.column_dimensions['A'].width = 35
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 25
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 15
 
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

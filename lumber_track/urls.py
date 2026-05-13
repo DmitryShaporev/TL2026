@@ -133,4 +133,10 @@ path('reports/movement/result/', views.report_movement_result, name='report_move
 path('reports/category/', views.report_category, name='report_category'),
 path('reports/category/result/', views.report_category_result, name='report_category_result'),
 
+# Отчет: Сводный по категориям для штучных
+path('reports/category-unit/', views.report_category_unit, name='report_category_unit'),
+path('reports/category-unit/result/', views.report_category_unit_result, name='report_category_unit_result'),
+# lumber_track/urls.py - добавьте
+path('reports/detailed/', views.report_detailed, name='report_detailed'),
+path('reports/detailed/result/', views.report_detailed_result, name='report_detailed_result'),
 ]

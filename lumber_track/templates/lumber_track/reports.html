@@ -21,7 +21,7 @@
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body text-center py-4">
                     <i class="bi bi-arrow-down-circle text-primary" style="font-size: 48px;"></i>
-                    <h5 class="card-title mt-3">Поступление</h5>
+                    <h5 class="card-title mt-3">Поступление от ЦСИ</h5>
                     <p class="card-text text-muted small">Отчет по поступлению продукции</p>
                 </div>
             </div>
@@ -34,8 +34,8 @@
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body text-center py-4">
                     <i class="bi bi-building text-success" style="font-size: 48px;"></i>
-                    <h5 class="card-title mt-3">На склад</h5>
-                    <p class="card-text text-muted small">Поступление на склад</p>
+                    <h5 class="card-title mt-3">В розничный склад-магазин</h5>
+                    <p class="card-text text-muted small">Поступление в магазин Стрелка</p>
                 </div>
             </div>
         </a>
@@ -47,8 +47,8 @@
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body text-center py-4">
                     <i class="bi bi-shop text-warning" style="font-size: 48px;"></i>
-                    <h5 class="card-title mt-3">В магазин</h5>
-                    <p class="card-text text-muted small">Отгрузка в магазин</p>
+                    <h5 class="card-title mt-3">В магазин Красноярск</h5>
+                    <p class="card-text text-muted small">Отгрузка в магазин в Красноярске</p>
                 </div>
             </div>
         </a>
@@ -67,17 +67,33 @@
         </a>
     </div>
 </div>
-<!-- Отчет: Сводный по категориям -->
-<div class="col-md-3">
-    <a href="{% url 'lumber_track:report_category' %}" class="text-decoration-none">
-        <div class="card h-100 shadow-sm border-0">
-            <div class="card-body text-center py-4">
-                <i class="bi bi-table text-danger" style="font-size: 48px;"></i>
-                <h5 class="card-title mt-3">Сводный по категориям</h5>
-                <p class="card-text text-muted small">Детальный отчет с разбивкой по категориям</p>
+
+<div class="row g-4 mt-2">
+    <!-- Отчет: Сводный по категориям (погонаж) -->
+    <div class="col-md-3">
+        <a href="{% url 'lumber_track:report_category' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-table text-danger" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">Сводный (погонаж)</h5>
+                    <p class="card-text text-muted small">Детальный отчет по погонажу с разбивкой по категориям</p>
+                </div>
             </div>
-        </div>
-    </a>
+        </a>
+    </div>
+
+    <!-- Отчет: Сводный по категориям (штучные) -->
+    <div class="col-md-3">
+        <a href="{% url 'lumber_track:report_category_unit' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-boxes text-warning" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">Сводный (штучные)</h5>
+                    <p class="card-text text-muted small">Отчет по штучным изделиям с разбивкой по категориям</p>
+                </div>
+            </div>
+        </a>
+    </div>
 </div>
 
 <!-- Дополнительная информация -->
