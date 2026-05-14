@@ -1,0 +1,258 @@
+<!-- lumber_track/templates/lumber_track/report_stock_balance.html -->
+{% extends 'lumber_track/base.html' %}
+
+{% block title %}{{ title }} - результаты{% endblock %}
+
+{% block extra_css %}
+<style>
+    .species-header {
+        background-color: #e9ecef !important;
+        font-weight: bold;
+        font-size: 1.1rem;
+    }
+    .grade-header {
+        background-color: #d4edda !important;
+        font-weight: bold;
+        font-size: 1rem;
+    }
+    .table-bordered td,
+    .table-bordered th {
+        border: 1px solid #000000 !important;
+    }
+    thead th {
+        background-color: #4472C4 !important;
+        color: white !important;
+        border-bottom: 2px solid #000 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="h2 mb-3">
+                    <i class="bi bi-pie-chart"></i> {{ title }}
+                </h1>
+                <p class="text-muted">
+                    Остатки на складе по состоянию на: {{ report_date|date:"d.m.Y" }}
+                </p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'lumber_track:reports_page' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Назад к отчетам
+                </a>
+                <a href="{% url url_name %}?export=excel" class="btn btn-success">
+                    <i class="bi bi-file-excel"></i> Экспорт в Excel
+                </a>
+                <button type="button" class="btn btn-info" id="printBtn">
+                    <i class="bi bi-printer"></i> Печать
+                </button>
+            </div>
+        </div>
+        <hr>
+    </div>
+</div>
+
+<!-- Поле поиска -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body py-2">
+                <div class="input-group">
+                    <span class="input-group-text bg-white">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text"
+                           class="form-control border-start-0"
+                           id="searchInput"
+                           placeholder="Поиск по наименованию, породе, размеру...">
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0" id="reportTable">
+                        <thead>
+                            <tr>
+                                <th>Наименование</th>
+                                <th>Размер</th>
+                                <th>Порода</th>
+                                <th>Категория</th>
+                                <th class="text-end">Кол-во (шт)</th>
+                                <th class="text-end">Объем (м³)</th>
+                                <th class="text-end">Площадь (м²)</th>
+                            </tr>
+                        </thead>
+                       <tbody id="tableBody">
+    {% for species, grades in grouped_data.items %}
+        <tr class="species-header">
+            <td colspan="7"></i> {{ species }}</td>
+        </tr>
+        {% for grade, items in grades.items %}
+            <tr class="grade-header">
+                <td colspan="7"> Категория {{ grade }}</td>
+            </tr>
+            {% for item in items %}
+            <tr class="data-row">
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.dimension_display }}</td>
+                <td>{{ item.species }}</td>
+                <td>{{ item.grade }}</td>
+                <td class="text-end">{{ item.quantity }}</td>
+                <td class="text-end">{{ item.volume|floatformat:3 }}</td>
+                <td class="text-end">{{ item.area|floatformat:2 }}</td>
+             </tr>
+            {% endfor %}
+        {% endfor %}
+    {% empty %}
+        <tr>
+            <td colspan="7" class="text-center text-muted py-4">
+                <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                Нет остатков на складе
+             </td>
+         </tr>
+    {% endfor %}
+</tbody>
+                        <tfoot class="table-primary">
+                            <tr>
+                                <th colspan="4" class="text-end">ВСЕГО на складе:</th>
+                                <th class="text-end">{{ grand_total_quantity }}</th>
+                                <th class="text-end">{{ grand_total_volume|floatformat:3 }}</th>
+                                <th class="text-end">{{ grand_total_area|floatformat:2 }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Поиск по таблице
+    const searchInput = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('clearSearch');
+    const tableBody = document.getElementById('tableBody');
+    const rows = tableBody ? Array.from(tableBody.querySelectorAll('.data-row')) : [];
+
+    if (searchInput) {
+        function filterTable() {
+            const searchTerm = searchInput.value.toLowerCase().trim();
+
+            // Сначала показываем все строки
+            document.querySelectorAll('.species-header, .grade-header').forEach(row => row.style.display = '');
+            rows.forEach(row => row.style.display = '');
+
+            if (searchTerm !== '') {
+                rows.forEach(row => {
+                    const rowText = row.innerText.toLowerCase();
+                    if (!rowText.includes(searchTerm)) {
+                        row.style.display = 'none';
+                    }
+                });
+
+                // Скрываем заголовки пород и категорий, если нет видимых строк
+                document.querySelectorAll('.species-header').forEach(header => {
+                    let nextRow = header.nextElementSibling;
+                    let hasVisible = false;
+                    while (nextRow && !nextRow.classList.contains('species-header')) {
+                        if (nextRow.classList.contains('grade-header') || nextRow.classList.contains('data-row')) {
+                            if (nextRow.style.display !== 'none') {
+                                hasVisible = true;
+                                break;
+                            }
+                        }
+                        nextRow = nextRow.nextElementSibling;
+                    }
+                    if (!hasVisible) {
+                        header.style.display = 'none';
+                    }
+                });
+
+                document.querySelectorAll('.grade-header').forEach(header => {
+                    let nextRow = header.nextElementSibling;
+                    let hasVisible = false;
+                    while (nextRow && !nextRow.classList.contains('species-header') && !nextRow.classList.contains('grade-header')) {
+                        if (nextRow.classList.contains('data-row') && nextRow.style.display !== 'none') {
+                            hasVisible = true;
+                            break;
+                        }
+                        nextRow = nextRow.nextElementSibling;
+                    }
+                    if (!hasVisible) {
+                        header.style.display = 'none';
+                    }
+                });
+            }
+
+            // Показываем сообщение "ничего не найдено"
+            let noResultsRow = document.getElementById('noResultsRow');
+            const visibleRows = rows.filter(row => row.style.display !== 'none');
+            if (searchTerm !== '' && visibleRows.length === 0) {
+                if (!noResultsRow) {
+                    noResultsRow = document.createElement('tr');
+                    noResultsRow.id = 'noResultsRow';
+                    noResultsRow.innerHTML = '<td colspan="7" class="text-center text-muted py-4">🔍 Ничего не найдено<\/td>';
+                    tableBody.appendChild(noResultsRow);
+                }
+            } else if (noResultsRow) {
+                noResultsRow.remove();
+            }
+        }
+
+        searchInput.addEventListener('input', filterTable);
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterTable();
+                searchInput.focus();
+            });
+        }
+    }
+
+   // Печать
+const printBtn = document.getElementById('printBtn');
+if (printBtn) {
+    printBtn.addEventListener('click', function() {
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write('<!DOCTYPE html>');
+        printWindow.document.write('<html><head><meta charset="UTF-8">');
+        printWindow.document.write('<title>{{ title }} на {{ report_date|date:"d.m.Y" }}</title>');
+
+        const links = document.querySelectorAll('link[rel="stylesheet"]');
+        links.forEach(link => {
+            printWindow.document.write(link.outerHTML);
+        });
+
+        printWindow.document.write('<style>');
+        printWindow.document.write('@media print { .btn, .d-flex.gap-2, .input-group, #printBtn, #searchInput, #clearSearch { display: none !important; } }');
+        printWindow.document.write('.species-header td { background-color: #e9ecef !important; }');
+        printWindow.document.write('.grade-header td { background-color: #d4edda !important; }');
+        printWindow.document.write('</style>');
+        printWindow.document.write('</head><body>');
+
+        // Копируем заголовок h1 и дату
+        const h1 = document.querySelector('h1');
+        const dateText = document.querySelector('.text-muted');
+        if (h1) printWindow.document.write('<div style="margin-bottom: 20px;">' + h1.outerHTML + (dateText ? dateText.outerHTML : '') + '</div>');
+
+        const table = document.querySelector('.table');
+        if (table) printWindow.document.write(table.outerHTML);
+
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.onload = function() { printWindow.print(); printWindow.close(); };
+    });
+}
+</script>
+{% endblock %}

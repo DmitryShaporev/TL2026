@@ -41,7 +41,11 @@ class QualityGrade(models.Model):
 
 class StorageLocation(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="Название")
-    is_active = models.BooleanField(default=True, verbose_name="Активно")
+    responsible_person = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Ответственный (ФИО)"
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
 
     class Meta:
@@ -51,8 +55,6 @@ class StorageLocation(models.Model):
 
     def __str__(self):
         return self.name
-    def __str__(self):
-        return f"{self.code} - {self.name}"
 
 class ProductName(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="Наименование")

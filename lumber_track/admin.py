@@ -130,8 +130,12 @@ class DocumentItemAdmin(admin.ModelAdmin):
 from .models import StorageLocation
 
 @admin.register(StorageLocation)
+
 class StorageLocationAdmin(admin.ModelAdmin):
-    list_display = ['name', 'is_active', 'created_at']
-    list_filter = ['is_active']
-    search_fields = ['name']
-    list_editable = ['is_active']
+    list_display = ['name', 'responsible_person', 'created_at']
+    search_fields = ['name', 'responsible_person']
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('name', 'responsible_person')
+        }),
+    )

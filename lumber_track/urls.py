@@ -139,4 +139,22 @@ path('reports/category-unit/result/', views.report_category_unit_result, name='r
 # lumber_track/urls.py - добавьте
 path('reports/detailed/', views.report_detailed, name='report_detailed'),
 path('reports/detailed/result/', views.report_detailed_result, name='report_detailed_result'),
+
+
+path('reports/stock-balance/', views.report_stock_balance, name='report_stock_balance'),
+path('reports/stock-balance/result/', views.report_stock_balance_result, name='report_stock_balance_result'),
+
+# lumber_track/urls.py - добавьте
+# lumber_track/urls.py - добавьте в urlpatterns
+
+# Сводные отчеты (группировка по породам и категориям)
+path('reports/income-summary/', views.report_income_summary, name='report_income_summary'),
+path('reports/income-summary/result/', views.report_income_summary_result, name='report_income_summary_result'),
+
+path('reports/to-stock-summary/', views.report_to_stock_summary, name='report_to_stock_summary'),
+path('reports/to-stock-summary/result/', views.report_to_stock_summary_result, name='report_to_stock_summary_result'),
+
+path('reports/to-shop-summary/', views.report_to_shop_summary, name='report_to_shop_summary'),
+path('reports/to-shop-summary/result/', views.report_to_shop_summary_result, name='report_to_shop_summary_result'),
+
 ]
