@@ -10,6 +10,7 @@ from django.views.decorators.http import require_http_methods
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import connection, IntegrityError
+from django.contrib.auth.decorators import login_required
 
 from .models import (
     ProductType, WoodSpecies, QualityGrade, ProductName,
@@ -177,7 +178,7 @@ def export_to_excel(data, title, date_from, date_to):
 def home_view(request):
     return render(request, 'lumber_track/home.html')
 
-
+@login_required
 def directories_view(request):
     return render(request, 'lumber_track/directories.html')
 
@@ -566,6 +567,7 @@ def storagelocation_data(request, pk):
 
 
 # ========== ДОКУМЕНТЫ ==========
+@login_required
 def documents_page(request):
     return render(request, 'lumber_track/documents.html')
 
@@ -1040,6 +1042,7 @@ def api_search_unitdim(request):
 
 
 # ========== ОТЧЕТЫ ==========
+@login_required
 def reports_page(request):
     return render(request, 'lumber_track/reports.html')
 
@@ -3970,3 +3973,27 @@ def document_print(request, pk):
     }
 
     return render(request, 'lumber_track/document_print.html', context)
+
+
+# lumber_track/views.py
+from django.shortcuts import redirect
+from django.contrib.auth import login
+from django.contrib.auth.forms import AuthenticationForm
+
+
+def custom_login(request):
+    if request.method == 'POST':
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            user = form.get_user()
+            login(request, user)
+
+            # Перенаправляем в зависимости от роли
+            if user.username == 'buh':
+                return redirect('lumber_track:reports_page')
+            else:
+                return redirect('lumber_track:home')
+    else:
+        form = AuthenticationForm()
+
+    return render(request, 'lumber_track/login.html', {'form': form})

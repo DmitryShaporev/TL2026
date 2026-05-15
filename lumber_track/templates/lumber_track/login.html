@@ -1,0 +1,73 @@
+<!-- lumber_track/templates/lumber_track/login.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход в LumberTrack</title>
+    {% load static %}
+    <link href="{% static 'bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            width: 100%;
+            max-width: 350px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .btn-login {
+            background: #2c5f2d;
+            border: none;
+            width: 100%;
+            padding: 10px;
+        }
+        .btn-login:hover {
+            background: #1e3d1f;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <i class="bi bi-tree"></i>
+            <h3>LumberTrack</h3>
+            <p class="text-muted">Вход в систему</p>
+        </div>
+
+        {% if form.errors %}
+        <div class="alert alert-danger">
+            Неверный логин или пароль
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <input type="text" name="username" class="form-control" placeholder="Логин" required autofocus>
+            </div>
+            <div class="mb-3">
+                <input type="password" name="password" class="form-control" placeholder="Пароль" required>
+            </div>
+            <button type="submit" class="btn btn-login btn-primary">Войти</button>
+        </form>
+
+        <div class="mt-3 text-center">
+            <small class="text-muted">
+                manager  - полный доступ<br>
+                buh  - только отчеты
+            </small>
+        </div>
+    </div>
+</body>
+</html>

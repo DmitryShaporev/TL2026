@@ -1,13 +1,23 @@
 # lumber_track/urls.py
 from django.urls import path
 from . import views
-
+from django.contrib.auth import views as auth_views
+from django.contrib.auth.views import LoginView, LogoutView
 app_name = 'lumber_track'
 
 urlpatterns = [
     # Главная и справочники
-    path('', views.home_view, name='home'),
+# Своя форма входа
+    path('', views.custom_login, name='login'),
+    path('logout/', LogoutView.as_view(next_page='/'), name='logout'),
+    path('home/', views.home_view, name='home'),
     path('directories/', views.directories_view, name='directories'),
+#   path('', LoginView.as_view(template_name='lumber_track/login.html'), name='login'),
+#     path('logout/', LogoutView.as_view(next_page='/'), name='logout'),
+#     path('home/', views.home_view, name='home'),
+   # path('', views.home_view, name='home'),
+    path('directories/', views.directories_view, name='directories'),
+path('logout/', LogoutView.as_view(), name='logout'),  # добавляем name='logout'
 
     # ========== Типы продукции ==========
     path('directories/producttype/', views.producttype_list, name='producttype_list'),
@@ -158,4 +168,8 @@ path('reports/to-shop-summary/', views.report_to_shop_summary, name='report_to_s
 path('reports/to-shop-summary/result/', views.report_to_shop_summary_result, name='report_to_shop_summary_result'),
 # lumber_track/urls.py - добавьте
 path('documents/<int:pk>/print/', views.document_print, name='document_print'),
+
+    # Авторизация
+    path('login/', auth_views.LoginView.as_view(template_name='lumber_track/login.html'), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(next_page='/login/'), name='logout'),
 ]

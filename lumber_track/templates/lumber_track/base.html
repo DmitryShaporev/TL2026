@@ -45,7 +45,7 @@
     <!-- Навигация -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container ">
-            <a class="navbar-brand text-white" href="{% url 'lumber_track:home' %}">
+            <a class="navbar-brand text-white" href="">
                  <i class="bi bi-tree text-success" ></i> TimberLogic
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -53,27 +53,37 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'lumber_track:directories' %}">
-                            <i class="bi bi-book  " ></i> Справочники
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                         <a class="nav-link" href="{% url 'lumber_track:documents_page' %}">
-                            <i class="bi bi-file-text "></i> Документы
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'lumber_track:reports_page' %}">
-                            <i class="bi bi-bar-chart "></i> Отчеты
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#">
-                            <i class="bi bi-box-arrow-right text-danger"></i> Выход
-                        </a>
-                    </li>
-                </ul>
+    {% if user.is_authenticated %}
+        <!-- Если пользователь НЕ accountant - показываем все -->
+        {% if user.username != 'buh' %}
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'lumber_track:directories' %}">
+                <i class="bi bi-book"></i> Справочники
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'lumber_track:documents_page' %}">
+                <i class="bi bi-file-text"></i> Документы
+            </a>
+        </li>
+        {% endif %}
+
+        <!-- Отчеты показываем всем -->
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'lumber_track:reports_page' %}">
+                <i class="bi bi-bar-chart"></i> Отчеты
+            </a>
+        </li>
+
+
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'lumber_track:logout' %}">
+    <i class="bi bi-box-arrow-right text-danger"></i> Выход
+</a>
+        </li>
+    {% endif %}
+</ul>
+
             </div>
         </div>
     </nav>
