@@ -1,0 +1,167 @@
+<!-- lumber_track/templates/lumber_track/document_print.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Документ №{{ doc.doc_number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+        body {
+            font-family: 'DejaVu Sans', 'Arial', sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 16px;
+            margin: 0;
+        }
+        .header h2 {
+            font-size: 14px;
+            margin: 5px 0;
+        }
+        .info {
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        .info td {
+            padding: 5px;
+            vertical-align: top;
+        }
+        .info .label {
+            font-weight: bold;
+            width: 80px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 6px;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-align: center;
+        }
+        td.text-end {
+            text-align: right;
+        }
+        .text-center {
+            text-align: center;
+        }
+        .total-row {
+            font-weight: bold;
+            background-color: #f9f9f9;
+        }
+        .signatures {
+            margin-top: 40px;
+            width: 100%;
+        }
+        .signatures td {
+            padding-top: 30px;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 10px;
+            text-align: center;
+            color: #666;
+        }
+        @media print {
+            body {
+                margin: 0;
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>НАКЛАДНАЯ № {{ doc.doc_number }}</h1>
+        <h2>от {{ doc.doc_date|date:"d.m.Y" }}</h2>
+    </div>
+
+    <table class="info">
+        <tr>
+            <td class="label">Кому:</td>
+            <td>{{ to_whom|linebreaksbr }}</td>
+        </tr>
+        <tr>
+            <td class="label">От кого:</td>
+            <td>{{ from_whom|linebreaksbr }}</td>
+        </tr>
+
+    </table>
+
+    <table>
+        <thead>
+            <tr>
+                <th class="text-center">№ п/п</th>
+                <th>Наименование</th>
+                <th>Размер</th>
+                <th>Порода</th>
+                <th>Сорт</th>
+                <th class="text-end">Кол-во (шт)</th>
+                <th class="text-end">Площадь (м²)</th>
+                <th class="text-end">Объем (м³)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ item.num }}</td>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.dimension }}</td>
+                <td>{{ item.species }}</td>
+                <td class="text-center">{{ item.grade }}</td>
+                <td class="text-end">{{ item.quantity }}</td>
+                <td class="text-end">{{ item.area|floatformat:2 }}</td>
+                <td class="text-end">{{ item.volume|floatformat:3 }}</td>
+             </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="5" class="text-end"><strong>ИТОГО:</strong></td>
+                <td class="text-end"><strong>{{ total_quantity }}</strong></td>
+                <td class="text-end"><strong>{{ total_area|floatformat:2 }}</strong></td>
+                <td class="text-end"><strong>{{ total_volume|floatformat:3 }}</strong></td>
+             </tr>
+        </tbody>
+    </table>
+
+    <table class="signatures">
+        <tr>
+            <td style="width: 50%;">
+                Сдал: ___________________<br>
+                <small>(подпись, расшифровка)</small>
+            </td>
+            <td style="width: 50%;">
+                Принял: ___________________<br>
+                <small>(подпись, расшифровка)</small>
+            </td>
+        </tr>
+    </table>
+
+
+
+    <script>
+        // Автоматический вызов печати при загрузке страницы
+        window.onload = function() {
+            window.print();
+        };
+
+        // После закрытия окна печати закрываем текущее окно (возвращаемся в журнал)
+        window.onafterprint = function() {
+            window.close();
+        };
+    </script>
+</body>
+</html>

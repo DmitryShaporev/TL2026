@@ -3,6 +3,25 @@
 
 {% block title %}Отчеты{% endblock %}
 
+{% block extra_css %}
+<style>
+    .card-title {
+        word-wrap: break-word;
+        white-space: normal;
+        line-height: 1.3;
+        min-height: 2.6em;
+    }
+    .card-body {
+        display: flex;
+        flex-direction: column;
+    }
+    .card-text {
+        word-wrap: break-word;
+        white-space: normal;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
@@ -10,7 +29,6 @@
             <i class="bi bi-graph-up"></i> Отчеты
         </h1>
         <p class="text-muted">Аналитика движения продукции</p>
-        <hr>
     </div>
 </div>
 
@@ -21,13 +39,12 @@
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body text-center py-4">
                     <i class="bi bi-arrow-down-circle text-success" style="font-size: 48px;"></i>
-                    <h5 class="card-title mt-3">Поступление от ЦСИ (по дням)</h5>
+                    <h5 class="card-title mt-3">Поступление от ЦСИ<br><small class="text-muted">(по дням)</small></h5>
                     <p class="card-text text-muted small">Отчет по поступлению продукции</p>
                 </div>
             </div>
         </a>
     </div>
-
 
     <!-- Отчет: На склад -->
     <div class="col-md-3">
@@ -35,25 +52,26 @@
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body text-center py-4">
                     <i class="bi bi-cart4 text-success" style="font-size: 48px;"></i>
-                    <h5 class="card-title mt-3">В розничный склад-магазин (по дням)</h5>
+                    <h5 class="card-title mt-3">В розничный склад-магазин<br><small class="text-muted">(по дням)</small></h5>
                     <p class="card-text text-muted small">Поступление в магазин Стрелка</p>
                 </div>
             </div>
         </a>
     </div>
 
- <div class="col-md-3">
+    <div class="col-md-3">
         <a href="{% url 'lumber_track:report_to_shop' %}" class="text-decoration-none">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body text-center py-4">
                     <i class="bi bi-buildings text-success" style="font-size: 48px;"></i>
-                    <h5 class="card-title mt-3">В магазин Красноярск (по дням)</h5>
+                    <h5 class="card-title mt-3">В магазин Красноярск<br><small class="text-muted">(по дням)</small></h5>
                     <p class="card-text text-muted small">Отгрузка в магазин в Красноярске</p>
                 </div>
             </div>
         </a>
     </div>
- <div class="col-md-3">
+
+    <div class="col-md-3">
         <a href="{% url 'lumber_track:report_movement' %}" class="text-decoration-none">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body text-center py-4">
@@ -65,54 +83,53 @@
         </a>
     </div>
 
+    <div class="col-md-3">
+        <a href="{% url 'lumber_track:report_income_summary' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-arrow-down-circle text-primary" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">Поступление от ЦСИ<br><small class="text-muted">(итоги)</small></h5>
+                    <p class="card-text text-muted small">Сводка поступления с группировкой</p>
+                </div>
+            </div>
+        </a>
+    </div>
 
     <div class="col-md-3">
-    <a href="{% url 'lumber_track:report_income_summary' %}" class="text-decoration-none">
-        <div class="card h-100 shadow-sm border-0">
-            <div class="card-body text-center py-4">
-                <i class="bi bi-arrow-down-circle text-primary" style="font-size: 48px;"></i>
-                <h5 class="card-title mt-3">Поступление от ЦСИ (итоги)</h5>
-                <p class="card-text text-muted small">Сводка поступления с группировкой</p>
+        <a href="{% url 'lumber_track:report_to_stock_summary' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-cart4 text-primary" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">В розничный склад-магазин<br><small class="text-muted">(итоги)</small></h5>
+                    <p class="card-text text-muted small">Поступление в магазин Стрелка</p>
+                </div>
             </div>
-        </div>
-    </a>
-</div>
+        </a>
+    </div>
 
     <div class="col-md-3">
-    <a href="{% url 'lumber_track:report_to_stock_summary' %}" class="text-decoration-none">
-        <div class="card h-100 shadow-sm border-0">
-            <div class="card-body text-center py-4">
-                <i class="bi  bi-cart4 text-primary" style="font-size: 48px;"></i>
-                <h5 class="card-title mt-3">В розничный склад-магазин (итоги)</h5>
-                <p class="card-text text-muted small">Поступление в магазин Стрелка</p>
+        <a href="{% url 'lumber_track:report_to_shop_summary' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-buildings text-primary" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">В магазин Красноярск<br><small class="text-muted">(итоги)</small></h5>
+                    <p class="card-text text-muted small">Сводка отгрузок в магазин</p>
+                </div>
             </div>
-        </div>
-    </a>
-</div>
-    <!-- Отчет: В магазин -->
-<!-- Отчет: Движение продукции -->
-<div class="col-md-3">
-    <a href="{% url 'lumber_track:report_to_shop_summary' %}" class="text-decoration-none">
-        <div class="card h-100 shadow-sm border-0">
-            <div class="card-body text-center py-4">
-                <i class="bi bi-buildings text-primary" style="font-size: 48px;"></i>
-                <h5 class="card-title mt-3">В магазин Красноярск (итоги)</h5>
-                <p class="card-text text-muted small">Сводка отгрузок в магазин</p>
+        </a>
+    </div>
+
+    <div class="col-md-3">
+        <a href="{% url 'lumber_track:report_stock_balance' %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-pie-chart text-success" style="font-size: 48px;"></i>
+                    <h5 class="card-title mt-3">Остатки на складе</h5>
+                    <p class="card-text text-muted small">Текущие остатки готовой продукции</p>
+                </div>
             </div>
-        </div>
-    </a>
-</div>
-<div class="col-md-3">
-    <a href="{% url 'lumber_track:report_stock_balance' %}" class="text-decoration-none">
-        <div class="card h-100 shadow-sm border-0">
-            <div class="card-body text-center py-4">
-                <i class="bi bi-pie-chart text-success" style="font-size: 48px;"></i>
-                <h5 class="card-title mt-3">Остатки на складе</h5>
-                <p class="card-text text-muted small">Текущие остатки готовой продукции</p>
-            </div>
-        </div>
-    </a>
-</div>
+        </a>
+    </div>
 </div>
 
 <div class="row g-4 mt-2">
@@ -141,15 +158,6 @@
             </div>
         </a>
     </div>
-<!-- Отчет: Поступление (сводный) -->
-
-<!-- Отчет: На склад (сводный) -->
-
-
-<!-- Отчет: В магазин (сводный) -->
-
-    <!-- Отчет: Остатки на складе -->
-
 </div>
 
 <!-- Дополнительная информация -->

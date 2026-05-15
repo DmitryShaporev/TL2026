@@ -3896,3 +3896,77 @@ def export_summary_to_excel(summary_data, title, date_from, date_to,
     response['Content-Disposition'] = f'attachment; filename="{title}_{date_from}_{date_to}.xlsx"'
     wb.save(response)
     return response
+
+
+# lumber_track/views.py - замените функцию document_print
+
+def document_print(request, pk):
+    """Печатная форма документа (открывает окно печати)"""
+    doc = get_object_or_404(Document, pk=pk)
+    items = doc.items.all().select_related('product_name', 'species', 'grade', 'lumber_dim', 'unit_dim')
+
+    # Определяем тип документа
+    doc_type_name = dict(Document.DOCUMENT_TYPES).get(doc.doc_type, 'Документ')
+
+    # Определяем "Кому" и "От кого"
+    if doc.doc_type == 2:  # Приход
+        to_whom = f"{doc.location.name if doc.location else 'Склад готовой продукции'}"
+        # Получаем ФИО ответственного из места хранения
+        responsible = doc.location.responsible_person if doc.location and doc.location.responsible_person else '___________________'
+        to_whom_full = f"{to_whom}\nОтветственный: {responsible}"
+        from_whom = "ЦСИ\nМаркелов Д.С."
+    else:  # Расход (перемещение)
+        to_whom = "Магазин\n___________________"
+        # Для расхода берем место назначения
+        if doc.to_location:
+            responsible = doc.to_location.responsible_person if doc.to_location.responsible_person else '___________________'
+            to_whom_full = f"{doc.to_location.name}\nОтветственный: {responsible}"
+        else:
+            to_whom_full = "___________________"
+        from_whom = f"{doc.location.name if doc.location else 'Склад готовой продукции'}\nОтветственный: {doc.location.responsible_person if doc.location and doc.location.responsible_person else '___________________'}"
+
+    # Формируем данные для таблицы
+    table_data = []
+    for idx, item in enumerate(items, 1):
+        # Определяем размер
+        if item.lumber_dim:
+            dimension = f"{item.lumber_dim.thickness}×{item.lumber_dim.width}×{item.lumber_dim.length}"
+            area = item.lumber_dim.area_m2 * item.quantity
+            volume = item.lumber_dim.volume_m3 * item.quantity
+        elif item.unit_dim:
+            dimension = f"{item.unit_dim.length}×{item.unit_dim.width}×{item.unit_dim.height}"
+            area = 0
+            volume = 0
+        else:
+            dimension = "—"
+            area = 0
+            volume = 0
+
+        table_data.append({
+            'num': idx,
+            'product_name': item.product_name.name,
+            'dimension': dimension,
+            'species': item.species.name,
+            'grade': item.grade.code,
+            'quantity': item.quantity,
+            'area': area,
+            'volume': volume,
+        })
+
+    # Подсчет итогов
+    total_quantity = sum(item['quantity'] for item in table_data)
+    total_volume = sum(item['volume'] for item in table_data)
+    total_area = sum(item['area'] for item in table_data)
+
+    context = {
+        'doc': doc,
+        'doc_type_name': doc_type_name,
+        'items': table_data,
+        'total_quantity': total_quantity,
+        'total_volume': total_volume,
+        'total_area': total_area,
+        'to_whom': to_whom_full,
+        'from_whom': from_whom,
+    }
+
+    return render(request, 'lumber_track/document_print.html', context)

@@ -59,23 +59,31 @@
         <td>{{ doc.note|truncatechars:50|default:"—" }}</td>
         <td>{% if doc.has_items %}{{ doc.items.count }} позиц.{% else %}0 позиций{% endif %}</td>
         <td>{{ doc.created_at|date:"d.m.Y H:i" }}</td>
-        <td>
-            <a href="{% url 'lumber_track:document_edit' doc.id %}" class="btn btn-sm btn-outline-primary me-1" title="Редактировать">
-                <i class="bi bi-pencil"></i>
-            </a>
-            {% if doc.has_items %}
-                <span class="btn btn-sm btn-outline-secondary disabled" title="Нельзя удалить - есть позиции">
-                    <i class="bi bi-trash"></i>
-                </span>
-            {% else %}
-                <a href="{% url delete_url doc.id %}"
-                   class="btn btn-sm btn-outline-danger"
-                   onclick="return confirm('Удалить документ {{ doc.doc_number }}?')"
-                   title="Удалить">
-                    <i class="bi bi-trash"></i>
-                </a>
-            {% endif %}
-        </td>
+        <td class="text-nowrap">
+    <a href="{% url 'lumber_track:document_print' doc.id %}"
+       class="btn btn-sm btn-outline-info me-1"
+       title="Печать документа"
+       target="_blank">
+        <i class="bi bi-printer"></i>
+    </a>
+    <a href="{% url 'lumber_track:document_edit' doc.id %}"
+       class="btn btn-sm btn-outline-primary me-1"
+       title="Редактировать">
+        <i class="bi bi-pencil"></i>
+    </a>
+    {% if doc.has_items %}
+        <span class="btn btn-sm btn-outline-secondary disabled" title="Нельзя удалить - есть позиции">
+            <i class="bi bi-trash"></i>
+        </span>
+    {% else %}
+        <a href="{% url delete_url doc.id %}"
+           class="btn btn-sm btn-outline-danger"
+           onclick="return confirm('Удалить документ {{ doc.doc_number }}?')"
+           title="Удалить">
+            <i class="bi bi-trash"></i>
+        </a>
+    {% endif %}
+</td>
     </tr>
     {% endfor %}
 </tbody>

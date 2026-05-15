@@ -156,5 +156,6 @@ path('reports/to-stock-summary/result/', views.report_to_stock_summary_result, n
 
 path('reports/to-shop-summary/', views.report_to_shop_summary, name='report_to_shop_summary'),
 path('reports/to-shop-summary/result/', views.report_to_shop_summary_result, name='report_to_shop_summary_result'),
-
+# lumber_track/urls.py - добавьте
+path('documents/<int:pk>/print/', views.document_print, name='document_print'),
 ]
